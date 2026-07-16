@@ -21,9 +21,9 @@ jobs:
         run: |
           : > /tmp/plugin_payload.b64
           for part in 00 01 02 03 04 05 06; do
-            head -c 7001 ".bootstrap/part${part}" >> /tmp/plugin_payload.b64
+            head -c 7000 ".bootstrap/part${part}" >> /tmp/plugin_payload.b64
           done
-          head -c 3625 .bootstrap/part07 >> /tmp/plugin_payload.b64
+          head -c 3624 .bootstrap/part07 >> /tmp/plugin_payload.b64
           base64 --decode /tmp/plugin_payload.b64 > /tmp/plugin_payload.tar.gz
           echo '7271913f148c6befb27c9c02511a0cdadbec28657d231b819f306e2b1f1ce965  /tmp/plugin_payload.tar.gz' | sha256sum -c -
           tar -xzf /tmp/plugin_payload.tar.gz
