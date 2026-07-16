@@ -7,6 +7,7 @@ REF="main"
 WORK_DIR="/usr/data/ad5x-ifs-plugin-installer"
 ARCHIVE="$WORK_DIR/source.tar.gz"
 SOURCE_DIR="$WORK_DIR/$REPO_NAME-$REF"
+TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"
 MOONRAKER_URL="http://127.0.0.1:7125"
 
 fail() {
@@ -14,7 +15,7 @@ fail() {
     exit 1
 }
 
-echo "=== AD5X IFS Plugin for Spoolman — установка для чистого Z-Mod ==="
+echo "=== AD5X IFS Plugin for Spoolman — установка/обновление для Z-Mod ==="
 
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
@@ -64,16 +65,30 @@ echo "Распаковка средствами BusyBox..."
 gzip -dc "$ARCHIVE" | tar -C "$WORK_DIR" -xf -
 
 [ -f "$SOURCE_DIR/install.sh" ] || fail "в загруженном репозитории отсутствует install.sh"
+[ -f "$SOURCE_DIR/update.sh" ] || fail "в загруженном репозитории отсутствует update.sh"
 
 chmod +x "$SOURCE_DIR/install.sh" "$SOURCE_DIR/update.sh" "$SOURCE_DIR"/scripts/*.sh
-
 cd "$SOURCE_DIR"
-./install.sh
+
+if [ -d "$TARGET_DIR" ] && \
+   [ -f "$TARGET_DIR/ifs_spoolman.py" ] && \
+   [ -f "$TARGET_DIR/config.json" ] && \
+   [ -f "$TARGET_DIR/assignments.json" ]; then
+    echo "Обнаружена существующая установка: $TARGET_DIR"
+    echo "Режим: безопасное обновление с резервной копией и откатом"
+    ./update.sh
+    ACTION="Обновление"
+else
+    echo "Существующая установка не обнаружена"
+    echo "Режим: новая установка"
+    ./install.sh
+    ACTION="Установка"
+fi
 
 rm -rf "$WORK_DIR"
 
 echo
-echo "=== Установка завершена ==="
+echo "=== $ACTION завершено успешно ==="
 echo "Откройте: http://IP_ПРИНТЕРА:7913/"
 echo "Проверка состояния:"
-echo "/usr/data/config/mod_data/ifs_spoolman/status.sh"
+echo "$TARGET_DIR/status.sh"
