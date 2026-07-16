@@ -1,0 +1,19 @@
+config.json
+assignments.json
+*.log
+*.log.*
+*.pid
+*.tmp
+*.pyc
+__pycache__/
+backups/
+package_backup_*/
+*.bak_*
+.DS_Store
+Thumbs.db
+
+# Local repository release output
+dist/
+*.tar
+*.tar.gz
+*.zip
