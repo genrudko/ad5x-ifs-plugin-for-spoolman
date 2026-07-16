@@ -9,17 +9,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Compile Python backend
-        run: python3 -m py_compile plugin/ifs_spoolman.py
+        run: |
+          python3 -m py_compile plugin/ifs_spoolman.py
+          rm -rf plugin/__pycache__
+
       - name: Check POSIX shell syntax
         run: |
           sh -n install.sh
           sh -n update.sh
           for file in scripts/*.sh; do sh -n "$file"; done
+
       - name: Validate example JSON
         run: |
           python3 -m json.tool examples/config.example.json >/dev/null
           python3 -m json.tool examples/assignments.example.json >/dev/null
+
       - name: Reject private runtime artifacts
         run: |
           test ! -e config.json
