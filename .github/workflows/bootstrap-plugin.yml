@@ -2,6 +2,9 @@ name: Bootstrap plugin sources
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.bootstrap/retry'
 
 permissions:
   contents: write
