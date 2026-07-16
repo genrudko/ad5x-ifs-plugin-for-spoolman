@@ -6,6 +6,19 @@ Community plugin for **Flashforge Adventurer 5X / AD5X with Z-Mod** that synchro
 
 > **Beta software.** This is an independent community project and is not affiliated with Flashforge, Spoolman, Moonraker, Fluidd, or Z-Mod.
 
+## Spoolman is required before installation
+
+The plugin does **not** install Spoolman and cannot work without it.
+
+Before installing the plugin:
+
+1. install and run Spoolman on a PC, NAS, Raspberry Pi, home server, or VPS;
+2. add the Spoolman server URL to `moonraker.conf`;
+3. restart Moonraker;
+4. verify that Moonraker reports `"spoolman_connected": true`.
+
+See the [mandatory Spoolman setup guide](docs/spoolman.md).
+
 ## Features
 
 - Detects the active AD5X IFS slot.
@@ -23,24 +36,21 @@ Community plugin for **Flashforge Adventurer 5X / AD5X with Z-Mod** that synchro
 ## Requirements
 
 - Flashforge AD5X / Adventurer 5X.
-- Z-Mod with Moonraker and Fluidd.
-- Moonraker connected to a working Spoolman server.
+- Clean Z-Mod installation with working Moonraker and Fluidd.
+- Spoolman installed and configured beforehand.
+- Active Moonraker-to-Spoolman connection.
 - Root SSH access to the printer.
+- Printer access to GitHub for automatic download.
 
-## Installation
+## Easiest installation on clean Z-Mod
 
-Copy or clone this repository to the printer, enter the repository directory, then run:
+Connect over SSH as `root` and run:
 
 ```sh
-chmod +x install.sh update.sh scripts/*.sh
-./install.sh
+wget -qO /tmp/ad5x-ifs-install.sh https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
 
-The runtime files are installed to:
-
-```text
-/usr/data/config/mod_data/ifs_spoolman
-```
+The helper verifies Moonraker and Spoolman, downloads the repository without requiring git, extracts it using BusyBox-compatible commands, and installs the plugin.
 
 Open the management UI at:
 
@@ -48,11 +58,17 @@ Open the management UI at:
 http://PRINTER_IP:7913/
 ```
 
-Detailed instructions: [docs/installation.md](docs/installation.md).
+Detailed instructions, manual download, and the optional `git clone` method: [docs/installation.md](docs/installation.md).
+
+## Status
+
+```sh
+/usr/data/config/mod_data/ifs_spoolman/status.sh
+```
 
 ## Update
 
-From a newer checkout or extracted release:
+From a refreshed checkout or extracted repository:
 
 ```sh
 ./update.sh --dry-run
@@ -60,12 +76,6 @@ From a newer checkout or extracted release:
 ```
 
 `config.json` and `assignments.json` are preserved. The updater creates a timestamped backup and performs rollback if the service or health endpoint fails.
-
-## Status
-
-```sh
-/usr/data/config/mod_data/ifs_spoolman/status.sh
-```
 
 ## Uninstall
 
@@ -88,6 +98,7 @@ Permanently remove plugin data:
 
 ## Documentation
 
+- [Mandatory Spoolman setup](docs/spoolman.md)
 - [Installation and update](docs/installation.md)
 - [Configuration](docs/configuration.md)
 - [Fluidd integration](docs/fluidd-integration.md)
