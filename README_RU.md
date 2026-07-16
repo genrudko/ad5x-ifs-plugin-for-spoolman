@@ -40,29 +40,29 @@
 - Предварительно установленный и настроенный Spoolman.
 - Активное соединение Moonraker со Spoolman.
 - Root-доступ к принтеру по SSH.
-- Доступ принтера к GitHub для автоматической загрузки.
+- Доступ принтера к `raw.githubusercontent.com`.
 
 ## Одна команда для установки и обновления
 
 Подключитесь к принтеру по SSH как `root` и вставьте:
 
 ```sh
-wget -qO /tmp/ad5x-ifs-install.sh https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
+
+Параметр `?cb=$(date +%s)` предотвращает получение старой закэшированной версии установщика.
 
 Скрипт самостоятельно:
 
 - проверит, что запущен Moonraker;
 - проверит реальное подключение Moonraker к Spoolman;
-- загрузит репозиторий без необходимости устанавливать `git`;
-- распакует его совместимым с BusyBox способом;
+- загрузит все необходимые файлы напрямую с `raw.githubusercontent.com` без `git` и `codeload.github.com`;
+- добавит cache-busting к каждому загружаемому файлу;
 - определит, установлен ли плагин ранее;
 - при новой установке запустит `install.sh`;
 - при существующей установке запустит безопасный `update.sh` с резервной копией, health-check и автоматическим откатом.
 
 `config.json` и `assignments.json` при обновлении сохраняются. Klipper, MCU, Moonraker и сам Z-Mod не удаляются и не переустанавливаются.
-
-На чистом Z-Mod утилита `git` может отсутствовать, а встроенный `tar` может не поддерживать ключ `-z`, поэтому этот способ является рекомендуемым.
 
 После установки или обновления откройте:
 
@@ -70,7 +70,7 @@ wget -qO /tmp/ad5x-ifs-install.sh https://raw.githubusercontent.com/genrudko/ad5
 http://IP_ПРИНТЕРА:7913/
 ```
 
-Подробная установка, ручная загрузка и вариант с `git clone`: [docs/installation_RU.md](docs/installation_RU.md).
+Подробная инструкция: [docs/installation_RU.md](docs/installation_RU.md).
 
 ## Проверка состояния
 
