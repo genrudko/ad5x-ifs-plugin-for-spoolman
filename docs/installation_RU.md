@@ -27,15 +27,18 @@ wget -qO- http://127.0.0.1:7125/server/spoolman/status
 Подключитесь к принтеру по SSH как `root` и вставьте:
 
 ```sh
-wget -qO /tmp/ad5x-ifs-install.sh https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
+
+Параметр `?cb=$(date +%s)` добавляет уникальное значение к URL и не позволяет прокси или CDN вернуть старую закэшированную версию установщика.
 
 Этот способ рассчитан именно на **чистый Z-Mod**:
 
 - не требует установленного `git`;
 - использует штатный `wget`;
-- не использует неподдерживаемый BusyBox `tar -z`;
-- отдельно распаковывает gzip-поток командой `gzip -dc`;
+- не использует `codeload.github.com`, с которым встроенный TLS-клиент Z-Mod может разрывать соединение;
+- загружает необходимые файлы напрямую с `raw.githubusercontent.com`;
+- добавляет cache-busting к каждому файлу;
 - проверяет Moonraker и подключение Spoolman до изменения файлов;
 - автоматически определяет новую или существующую установку.
 
@@ -72,34 +75,11 @@ http://IP_ПРИНТЕРА:7913/
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
-## 3. Ручная загрузка без git
+## 3. Почему не используется архив codeload.github.com
 
-Этот вариант полезен для диагностики или ручной работы.
+На некоторых сборках чистого Z-Mod встроенный `wget` успешно подключается к `raw.githubusercontent.com`, но получает TLS alert 80 или `Connection reset by peer` при скачивании архива с `codeload.github.com`.
 
-```sh
-cd /usr/data
-rm -rf ad5x-ifs-download ad5x-ifs-plugin-main.tar.gz
-wget -O ad5x-ifs-plugin-main.tar.gz https://codeload.github.com/genrudko/ad5x-ifs-plugin-for-spoolman/tar.gz/refs/heads/main
-mkdir -p ad5x-ifs-download
-gzip -dc ad5x-ifs-plugin-main.tar.gz | tar -C ad5x-ifs-download -xf -
-cd ad5x-ifs-download/ad5x-ifs-plugin-for-spoolman-main
-chmod +x install.sh update.sh scripts/*.sh
-```
-
-Для новой установки:
-
-```sh
-./install.sh
-```
-
-Для уже установленного плагина:
-
-```sh
-./update.sh --dry-run
-./update.sh
-```
-
-Почему не используется `tar -xzf`: встроенный BusyBox `tar` на некоторых сборках Z-Mod не поддерживает ключ `-z`.
+Поэтому рекомендуемый установщик не скачивает ZIP/TAR-архив и не распаковывает его. Он получает только необходимые файлы напрямую с raw-домена.
 
 ## 4. Установка через git clone
 
@@ -137,7 +117,7 @@ git pull
 
 Установщик:
 
-1. проверяет структуру загруженного репозитория;
+1. проверяет структуру загруженного набора файлов;
 2. создаёт рабочий каталог;
 3. копирует backend, веб-интерфейс, Fluidd-card и служебные скрипты;
 4. создаёт отсутствующие `config.json` и `assignments.json` из примеров;
