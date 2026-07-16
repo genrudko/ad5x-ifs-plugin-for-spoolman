@@ -1,5 +1,7 @@
 # AD5X IFS Plugin for Spoolman
 
+[Русская документация](README_RU.md)
+
 Community plugin for **Flashforge Adventurer 5X / AD5X with Z-Mod** that synchronizes the active IFS filament slot with the active spool in **Moonraker/Spoolman**.
 
 > **Beta software.** This is an independent community project and is not affiliated with Flashforge, Spoolman, Moonraker, Fluidd, or Z-Mod.
