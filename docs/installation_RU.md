@@ -20,9 +20,9 @@ wget -qO- http://127.0.0.1:7125/server/spoolman/status
 "spoolman_connected": true
 ```
 
-Пока возвращается `false`, ошибка или пустой ответ, устанавливать плагин рано.
+Пока возвращается `false`, ошибка или пустой ответ, устанавливать или обновлять плагин рано.
 
-## 2. Рекомендуемая установка одной командой
+## 2. Рекомендуемая команда для установки и обновления
 
 Подключитесь к принтеру по SSH как `root` и вставьте:
 
@@ -36,10 +36,31 @@ wget -qO /tmp/ad5x-ifs-install.sh https://raw.githubusercontent.com/genrudko/ad5
 - использует штатный `wget`;
 - не использует неподдерживаемый BusyBox `tar -z`;
 - отдельно распаковывает gzip-поток командой `gzip -dc`;
-- проверяет Moonraker и подключение Spoolman до копирования файлов;
-- устанавливает плагин в `/usr/data/config/mod_data/ifs_spoolman`.
+- проверяет Moonraker и подключение Spoolman до изменения файлов;
+- автоматически определяет новую или существующую установку.
 
-После успешной установки откройте:
+### Когда плагин ещё не установлен
+
+Скрипт запускает `install.sh` и устанавливает плагин в:
+
+```text
+/usr/data/config/mod_data/ifs_spoolman
+```
+
+### Когда плагин уже установлен
+
+Скрипт запускает `update.sh`, который:
+
+1. создаёт резервную копию рабочих файлов, `config.json` и `assignments.json`;
+2. останавливает только процесс плагина;
+3. копирует новую версию;
+4. запускает плагин;
+5. проверяет `/api/health`;
+6. автоматически восстанавливает предыдущую версию при ошибке.
+
+Существующие настройки и назначения катушек сохраняются. Klipper, MCU, Moonraker, Spoolman и сам Z-Mod не удаляются и не переустанавливаются.
+
+После успешной установки или обновления откройте:
 
 ```text
 http://IP_ПРИНТЕРА:7913/
@@ -53,17 +74,29 @@ http://IP_ПРИНТЕРА:7913/
 
 ## 3. Ручная загрузка без git
 
-Этот вариант полезен для диагностики или ручного обновления.
+Этот вариант полезен для диагностики или ручной работы.
 
 ```sh
 cd /usr/data
-rm -rf ad5x-ifs-plugin-for-spoolman-main ad5x-ifs-plugin-main.tar.gz
+rm -rf ad5x-ifs-download ad5x-ifs-plugin-main.tar.gz
 wget -O ad5x-ifs-plugin-main.tar.gz https://codeload.github.com/genrudko/ad5x-ifs-plugin-for-spoolman/tar.gz/refs/heads/main
 mkdir -p ad5x-ifs-download
 gzip -dc ad5x-ifs-plugin-main.tar.gz | tar -C ad5x-ifs-download -xf -
 cd ad5x-ifs-download/ad5x-ifs-plugin-for-spoolman-main
 chmod +x install.sh update.sh scripts/*.sh
+```
+
+Для новой установки:
+
+```sh
 ./install.sh
+```
+
+Для уже установленного плагина:
+
+```sh
+./update.sh --dry-run
+./update.sh
 ```
 
 Почему не используется `tar -xzf`: встроенный BusyBox `tar` на некоторых сборках Z-Mod не поддерживает ключ `-z`.
@@ -78,7 +111,7 @@ chmod +x install.sh update.sh scripts/*.sh
 git --version
 ```
 
-Клонирование и установка:
+Новая установка:
 
 ```sh
 cd /usr/data
@@ -89,7 +122,16 @@ chmod +x install.sh update.sh scripts/*.sh
 ./install.sh
 ```
 
-На чистом Z-Mod `git` может отсутствовать. В этом случае ничего дополнительно устанавливать не требуется — используйте рекомендуемую установку через `wget`.
+Обновление существующей установки:
+
+```sh
+cd /usr/data/ad5x-ifs-plugin-for-spoolman
+git pull
+./update.sh --dry-run
+./update.sh
+```
+
+На чистом Z-Mod `git` может отсутствовать. В этом случае ничего дополнительно устанавливать не требуется — используйте рекомендуемую команду через `wget`.
 
 ## 5. Что делает install.sh
 
@@ -103,45 +145,15 @@ chmod +x install.sh update.sh scripts/*.sh
 6. устанавливает интеграцию Fluidd;
 7. запускает только процесс AD5X IFS Plugin.
 
-Klipper, MCU и сам принтер не перезапускаются.
-
 Для копирования без запуска сервиса:
 
 ```sh
 ./install.sh --no-start
 ```
 
-## 6. Обновление
+Для обновления поверх существующей версии используйте `update.sh`, а не `install.sh`.
 
-Сначала загрузите свежую копию репозитория — через `git pull`, новую ручную загрузку или повторную загрузку архива.
-
-При использовании git:
-
-```sh
-cd /usr/data/ad5x-ifs-plugin-for-spoolman
-git pull
-./update.sh --dry-run
-./update.sh
-```
-
-При использовании архива перейдите в каталог новой распакованной версии и выполните:
-
-```sh
-./update.sh --dry-run
-./update.sh
-```
-
-Процесс обновления:
-
-1. проверяет структуру исходного пакета;
-2. создаёт резервную копию рабочих файлов и пользовательских настроек;
-3. останавливает только процесс плагина;
-4. копирует новую версию;
-5. запускает плагин;
-6. проверяет `/api/health`;
-7. автоматически откатывается при ошибке.
-
-## 7. Управление сервисом
+## 6. Управление сервисом
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/start.sh
@@ -149,7 +161,7 @@ git pull
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
-## 8. Удаление
+## 7. Удаление
 
 С резервной копией настроек и журналов:
 
