@@ -2,9 +2,6 @@ name: Bootstrap plugin sources
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.bootstrap/complete'
 
 permissions:
   contents: write
@@ -19,14 +16,84 @@ jobs:
 
       - name: Reconstruct plugin source archive
         run: |
-          : > /tmp/plugin_payload.b64
-          for part in 00 01 02 03 04 05 06; do
-            head -c 7000 ".bootstrap/part${part}" >> /tmp/plugin_payload.b64
-          done
-          head -c 3624 .bootstrap/part07 >> /tmp/plugin_payload.b64
-          base64 --decode /tmp/plugin_payload.b64 > /tmp/plugin_payload.tar.gz
-          echo '7271913f148c6befb27c9c02511a0cdadbec28657d231b819f306e2b1f1ce965  /tmp/plugin_payload.tar.gz' | sha256sum -c -
-          tar -xzf /tmp/plugin_payload.tar.gz
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import itertools
+          import re
+          import tarfile
+          from pathlib import Path
+
+          expected = "7271913f148c6befb27c9c02511a0cdadbec28657d231b819f306e2b1f1ce965"
+          parts = []
+
+          for index in range(8):
+              path = Path(f".bootstrap/part{index:02d}")
+              raw = path.read_text(encoding="utf-8")
+              clean = "".join(re.findall(r"[A-Za-z0-9+/=]", raw))
+              parts.append(clean)
+              print(f"part{index:02d}: raw={len(raw)} clean={len(clean)}")
+
+          first_trim_values = range(0, 9)
+          last_trim_values = range(0, 17)
+          found = None
+
+          for first_trim, last_trim in itertools.product(first_trim_values, last_trim_values):
+              selected = []
+
+              for part in parts[:7]:
+                  end = len(part) - first_trim if first_trim else len(part)
+                  selected.append(part[:end])
+
+              last_end = len(parts[7]) - last_trim if last_trim else len(parts[7])
+              selected.append(parts[7][:last_end])
+              payload = "".join(selected)
+
+              if len(payload) % 4:
+                  continue
+
+              try:
+                  decoded = base64.b64decode(payload, validate=True)
+              except Exception:
+                  continue
+
+              digest = hashlib.sha256(decoded).hexdigest()
+
+              if digest == expected:
+                  found = (first_trim, last_trim, decoded)
+                  break
+
+          if found is None:
+              raise SystemExit("Unable to reconstruct payload with uniform boundary trimming")
+
+          first_trim, last_trim, decoded = found
+          print(f"Matched payload: first_trim={first_trim}, last_trim={last_trim}, bytes={len(decoded)}")
+
+          archive = Path("/tmp/plugin_payload.tar.gz")
+          archive.write_bytes(decoded)
+
+          with tarfile.open(archive, "r:gz") as tf:
+              members = tf.getmembers()
+              names = [member.name for member in members]
+              required = {
+                  "plugin/ifs_spoolman.py",
+                  "plugin/ui_v0_2.html",
+                  "plugin/ifs-spoolman-card.js",
+                  "plugin/ifs-spoolman-layout.js",
+              }
+
+              if not required.issubset(names):
+                  raise SystemExit(f"Archive misses required files: {sorted(required - set(names))}")
+
+              tf.extractall(".")
+          PY
+
+      - name: Validate extracted sources
+        run: |
+          python3 -m py_compile plugin/ifs_spoolman.py
+          test -s plugin/ui_v0_2.html
+          test -s plugin/ifs-spoolman-card.js
+          test -s plugin/ifs-spoolman-layout.js
 
       - name: Commit extracted plugin sources
         run: |
