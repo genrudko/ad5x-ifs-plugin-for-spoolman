@@ -5,6 +5,7 @@ REPO_OWNER="genrudko"
 REPO_NAME="ad5x-ifs-plugin-for-spoolman"
 REF="main"
 RAW_BASE="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/$REF"
+CACHE_BUSTER="$(date +%s 2>/dev/null || echo "$$")"
 WORK_DIR="/usr/data/ad5x-ifs-plugin-installer"
 SOURCE_DIR="$WORK_DIR/source"
 TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"
@@ -29,7 +30,7 @@ download_file() {
     mkdir -p "$LOCAL_DIR"
     echo "  $REMOTE_PATH"
 
-    wget -qO "$LOCAL_PATH" "$RAW_BASE/$REMOTE_PATH" || {
+    wget -qO "$LOCAL_PATH" "$RAW_BASE/$REMOTE_PATH?cb=$CACHE_BUSTER" || {
         rm -f "$LOCAL_PATH"
         fail "не удалось загрузить $REMOTE_PATH"
     }
