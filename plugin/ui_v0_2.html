@@ -1,0 +1,1943 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>IFS Spoolman</title>
+
+<style>
+:root {
+  font-family: Inter, Roboto, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+
+  --bg: #0b1120;
+  --glow: rgba(37, 99, 235, .16);
+  --surface: rgba(17, 24, 39, .91);
+  --surface2: #172033;
+  --surface3: #1f2937;
+  --border: rgba(148, 163, 184, .18);
+  --border2: rgba(148, 163, 184, .32);
+  --text: #eef2ff;
+  --muted: #94a3b8;
+  --primary: #3b82f6;
+  --primary2: #2563eb;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --shadow: 0 18px 55px rgba(0, 0, 0, .28);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f1f5f9;
+    --glow: rgba(37, 99, 235, .10);
+    --surface: rgba(255, 255, 255, .94);
+    --surface2: #f8fafc;
+    --surface3: #eef2f7;
+    --border: rgba(15, 23, 42, .10);
+    --border2: rgba(15, 23, 42, .20);
+    --text: #172033;
+    --muted: #64748b;
+    --shadow: 0 18px 45px rgba(15, 23, 42, .10);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--bg);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 15% 0%, var(--glow), transparent 34rem),
+    var(--bg);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app {
+  width: min(1240px, 100%);
+  margin: 0 auto;
+  padding:
+    max(22px, env(safe-area-inset-top))
+    max(18px, env(safe-area-inset-right))
+    max(34px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
+}
+
+.hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.logo {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(96, 165, 250, .35);
+  border-radius: 17px;
+  background: linear-gradient(
+    145deg,
+    rgba(59, 130, 246, .29),
+    rgba(37, 99, 235, .09)
+  );
+  box-shadow: inset 0 1px rgba(255, 255, 255, .08);
+}
+
+.logo svg {
+  width: 32px;
+  height: 32px;
+  fill: var(--primary);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 37px);
+  line-height: 1.08;
+  letter-spacing: -.035em;
+}
+
+.subtitle {
+  max-width: 720px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-top: 9px;
+  padding: 0 9px;
+  border: 1px solid rgba(59, 130, 246, .28);
+  border-radius: 999px;
+  background: rgba(59, 130, 246, .10);
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .04em;
+}
+
+.connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .10);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.connection-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--warning);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, .13);
+}
+
+.connection.online .connection-dot {
+  background: var(--success);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, .13);
+}
+
+.connection.offline .connection-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, .13);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.summary-card {
+  min-width: 0;
+  padding: 15px 17px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .08);
+  backdrop-filter: blur(18px);
+}
+
+.summary-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.summary-value {
+  margin-top: 7px;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar {
+  position: sticky;
+  top: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(22px);
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1 1 300px;
+}
+
+.search-count {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  max-width: 150px;
+  transform: translateY(-50%);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  fill: var(--muted);
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  height: 42px;
+  padding: 0 132px 0 42px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  outline: none;
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.search:focus,
+.select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .15);
+}
+
+.search::placeholder {
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  transition: transform .12s ease, background .15s ease, opacity .15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: .43;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary2);
+}
+
+.btn-secondary {
+  border-color: var(--border2);
+  background: var(--surface3);
+  color: var(--text);
+}
+
+.btn-ghost {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.btn svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.unsaved {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 13px;
+  border: 1px solid rgba(245, 158, 11, .32);
+  border-radius: 12px;
+  background: rgba(245, 158, 11, .09);
+  color: var(--warning);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.unsaved.visible {
+  display: flex;
+}
+
+.slots-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.slot-card {
+  position: relative;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .10);
+  backdrop-filter: blur(18px);
+  transition: border-color .18s ease, transform .18s ease,
+    box-shadow .18s ease;
+}
+
+.slot-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border2);
+}
+
+.slot-card.active {
+  border-color: rgba(34, 197, 94, .64);
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, .16),
+    0 18px 44px rgba(0, 0, 0, .14);
+}
+
+.slot-card.changed::after {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, .12);
+  content: "";
+}
+
+.slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 15px;
+}
+
+.slot-title-wrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 11px;
+}
+
+.slot-number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface2);
+  font-weight: 900;
+}
+
+.slot-card.active .slot-number {
+  border-color: rgba(34, 197, 94, .45);
+  background: rgba(34, 197, 94, .12);
+  color: var(--success);
+}
+
+.slot-name {
+  font-size: 17px;
+  font-weight: 850;
+}
+
+.slot-state {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.active-badge {
+  display: none;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid rgba(34, 197, 94, .28);
+  border-radius: 999px;
+  background: rgba(34, 197, 94, .10);
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.slot-card.active .active-badge {
+  display: inline-flex;
+}
+
+.preview {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 106px;
+  margin-bottom: 15px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface2);
+}
+
+.spool {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  border: 1px solid rgba(148, 163, 184, .30);
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle,
+      var(--surface2) 0 18%,
+      transparent 19% 55%,
+      rgba(255, 255, 255, .13) 56% 64%,
+      transparent 65% 100%
+    ),
+    var(--spool-background, #64748b);
+  box-shadow:
+    inset 0 0 0 8px rgba(255, 255, 255, .05),
+    0 8px 20px rgba(0, 0, 0, .13);
+}
+
+.spool::after {
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(148, 163, 184, .36);
+  border-radius: 50%;
+  background: var(--surface2);
+  content: "";
+}
+
+.spool.empty {
+  opacity: .38;
+  filter: grayscale(1);
+}
+
+.filament-info {
+  min-width: 0;
+  align-self: center;
+}
+
+.filament-name {
+  display: -webkit-box;
+  min-height: 39px;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.filament-vendor {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.weight {
+  margin-top: 12px;
+}
+
+.weight-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.weight-value {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.progress {
+  height: 7px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, .16);
+}
+
+.progress-value {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--progress-background, var(--primary));
+  transition: width .2s ease;
+}
+
+.slot-card.low-stock,
+.slot-card.critical-stock {
+  border-color: var(--border);
+}
+
+.slot-card.active.low-stock,
+.slot-card.active.critical-stock {
+  border-color: rgba(34, 197, 94, .64);
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, .16),
+    0 18px 44px rgba(0, 0, 0, .14);
+}
+
+.stock-percent {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  margin-left: 9px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  vertical-align: middle;
+}
+
+.stock-percent.low {
+  border-color: rgba(245, 158, 11, .30);
+  background: rgba(245, 158, 11, .09);
+  color: var(--warning);
+}
+
+.stock-percent.critical {
+  border-color: rgba(239, 68, 68, .34);
+  background: rgba(239, 68, 68, .10);
+  color: var(--danger);
+}
+
+.stock-warning {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.stock-warning.visible {
+  display: flex;
+}
+
+.stock-warning.critical {
+  color: var(--danger);
+}
+
+.multicolor-pill {
+  color: #c4b5fd;
+  border-color: rgba(139, 92, 246, .32);
+  background: rgba(139, 92, 246, .10);
+}
+
+.color-count-pill {
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, .30);
+  background: rgba(59, 130, 246, .09);
+}
+
+.empty-message {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.empty-message strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.preview.empty-preview {
+  min-height: 96px;
+  opacity: .82;
+}
+
+.preview.empty-preview .spool {
+  width: 66px;
+  height: 66px;
+}
+
+.field-label {
+  display: block;
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.select {
+  width: 100%;
+  height: 44px;
+  padding: 0 42px 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  outline: none;
+  background-color: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.diagnostics {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.diagnostics summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 16px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  list-style: none;
+}
+
+.diagnostics summary::-webkit-details-marker {
+  display: none;
+}
+
+.diagnostics-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 20px;
+  padding: 0 16px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.diag-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.diag-item span:last-child {
+  overflow: hidden;
+  color: var(--text);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast-stack {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 100;
+  display: grid;
+  width: min(390px, calc(100vw - 36px));
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid var(--border2);
+  border-radius: 13px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  animation: toast-in .20s ease both;
+  backdrop-filter: blur(22px);
+}
+
+.toast.success {
+  border-color: rgba(34, 197, 94, .42);
+}
+
+.toast.error {
+  border-color: rgba(239, 68, 68, .48);
+}
+
+.toast-icon {
+  flex: 0 0 auto;
+  font-weight: 900;
+}
+
+.toast.success .toast-icon {
+  color: var(--success);
+}
+
+.toast.error .toast-icon {
+  color: var(--danger);
+}
+
+.toast-title {
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.toast-message {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.loading {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: none;
+  place-items: center;
+  background: rgba(2, 6, 23, .38);
+  backdrop-filter: blur(4px);
+}
+
+.loading.visible {
+  display: grid;
+}
+
+.loader {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(148, 163, 184, .25);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin .75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 860px) {
+  .hero {
+    flex-direction: column;
+  }
+
+  .summary {
+    grid-template-columns: 1fr;
+  }
+
+  .slots-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    position: static;
+    flex-wrap: wrap;
+  }
+
+  .search-wrap {
+    flex-basis: 100%;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .actions .btn {
+    flex: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  .app {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .logo {
+    width: 47px;
+    height: 47px;
+  }
+
+  .toolbar {
+    padding: 9px;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .btn-primary {
+    grid-column: 1 / -1;
+  }
+
+  .slot-card {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .preview {
+    grid-template-columns: 60px minmax(0, 1fr);
+    gap: 11px;
+    padding: 12px;
+  }
+
+  .spool {
+    width: 60px;
+    height: 60px;
+  }
+
+  .filament-name {
+    font-size: 14px;
+  }
+
+  .meta {
+    gap: 5px;
+  }
+
+  .pill {
+    min-height: 22px;
+    padding: 0 7px;
+  }
+
+  .diagnostics-body {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+  <header class="hero">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 0 1 7.75 6H16.9a5 5 0 0 0-9.8 0H4.25A8 8 0 0 1 12 4zm0 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 11a8 8 0 0 1-7.75-6H7.1a5 5 0 0 0 9.8 0h2.85A8 8 0 0 1 12 20z"/>
+        </svg>
+      </div>
+
+      <div>
+        <h1>IFS Spoolman</h1>
+        <div class="subtitle">
+          Привязка физических каналов IFS к катушкам Spoolman
+          и автоматическая синхронизация активного филамента.
+        </div>
+        <div class="version-badge">v0.2.2 beta</div>
+      </div>
+    </div>
+
+    <div class="connection" id="connection">
+      <span class="connection-dot"></span>
+      <span id="connectionText">Подключение…</span>
+    </div>
+  </header>
+
+  <section class="summary">
+    <div class="summary-card">
+      <div class="summary-label">Активный слот IFS</div>
+      <div class="summary-value" id="summarySlot">—</div>
+    </div>
+
+    <div class="summary-card">
+      <div class="summary-label">Катушка Moonraker</div>
+      <div class="summary-value" id="summarySpool">—</div>
+    </div>
+
+    <div class="summary-card">
+      <div class="summary-label">Назначено слотов</div>
+      <div class="summary-value" id="summaryAssigned">—</div>
+    </div>
+  </section>
+
+  <section class="toolbar">
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24">
+        <path d="M9.5 3a6.5 6.5 0 1 0 3.98 11.64L19.85 21 21 19.85l-6.36-6.37A6.5 6.5 0 0 0 9.5 3zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9z"/>
+      </svg>
+
+      <input
+        class="search"
+        id="searchInput"
+        type="search"
+        placeholder="Поиск по ID, производителю, названию или материалу"
+        autocomplete="off"
+      >
+      <span class="search-count" id="searchCount">Катушек: —</span>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" id="refreshButton" type="button">
+        <svg viewBox="0 0 24 24">
+          <path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 16.22 7.78L13 11h7V4l-2.35 2.35z"/>
+        </svg>
+        Обновить
+      </button>
+
+      <button class="btn btn-secondary" id="resetButton" type="button" disabled>
+        Отменить
+      </button>
+
+      <button class="btn btn-secondary" id="syncButton" type="button">
+        Синхронизировать
+      </button>
+
+      <button class="btn btn-primary" id="saveButton" type="button" disabled>
+        Сохранить изменения
+      </button>
+    </div>
+  </section>
+
+  <div class="unsaved" id="unsavedBanner">
+    <span>●</span>
+    Есть несохранённые изменения
+  </div>
+
+  <main class="slots-grid" id="slotsGrid"></main>
+
+  <details class="diagnostics">
+    <summary>
+      <span>Диагностика</span>
+      <span>Показать сведения</span>
+    </summary>
+
+    <div class="diagnostics-body">
+      <div class="diag-item">
+        <span>Активный слот</span>
+        <span id="diagSlot">—</span>
+      </div>
+
+      <div class="diag-item">
+        <span>Spool ID Moonraker</span>
+        <span id="diagSpool">—</span>
+      </div>
+
+      <div class="diag-item">
+        <span>Связь со Spoolman</span>
+        <span id="diagConnection">—</span>
+      </div>
+
+      <div class="diag-item">
+        <span>Последняя синхронизация</span>
+        <span id="diagSwitch">—</span>
+      </div>
+
+      <div class="diag-item">
+        <span>Последняя ошибка</span>
+        <span id="diagError">Нет</span>
+      </div>
+
+      <div class="diag-item">
+        <span>Версия интерфейса</span>
+        <span>0.2.2 beta</span>
+      </div>
+    </div>
+  </details>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<div class="loading visible" id="loading">
+  <div class="loader">
+    <span class="spinner"></span>
+    <span id="loadingText">Загрузка данных…</span>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const SLOT_COUNT = 4;
+
+let spools = [];
+let statusData = null;
+let originalAssignments = {};
+let draftAssignments = {};
+let searchQuery = "";
+let requestInProgress = false;
+
+const el = id => document.getElementById(id);
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    cache: "no-store",
+    ...options
+  });
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(`Некорректный ответ сервера: HTTP ${response.status}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.error || `HTTP ${response.status}`);
+  }
+
+  return data;
+}
+
+function setLoading(visible, text = "Загрузка данных…") {
+  el("loadingText").textContent = text;
+  el("loading").classList.toggle("visible", visible);
+}
+
+function showToast(type, title, message) {
+  const toast = document.createElement("div");
+
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <div class="toast-icon">${type === "success" ? "✓" : "!"}</div>
+    <div>
+      <div class="toast-title">${escapeHtml(title)}</div>
+      <div class="toast-message">${escapeHtml(message)}</div>
+    </div>
+  `;
+
+  el("toastStack").appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(8px)";
+    setTimeout(() => toast.remove(), 220);
+  }, 4200);
+}
+
+function normalizeAssignments(raw) {
+  const result = {};
+
+  for (let slot = 1; slot <= SLOT_COUNT; slot += 1) {
+    const value = raw?.[String(slot)];
+
+    result[String(slot)] =
+      value === null || value === undefined || value === ""
+        ? null
+        : Number(value);
+  }
+
+  return result;
+}
+
+function assignmentsEqual(left, right) {
+  for (let slot = 1; slot <= SLOT_COUNT; slot += 1) {
+    const key = String(slot);
+
+    if ((left[key] ?? null) !== (right[key] ?? null)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function hasChanges() {
+  return !assignmentsEqual(originalAssignments, draftAssignments);
+}
+
+function getSpool(id) {
+  if (id === null || id === undefined) {
+    return null;
+  }
+
+  return spools.find(item => Number(item.id) === Number(id)) || null;
+}
+
+function filamentOf(spool) {
+  return spool?.filament || {};
+}
+
+function normalizeHex(value) {
+  const raw = String(value || "")
+    .trim()
+    .replace(/^#/, "");
+
+  if (!/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(raw)) {
+    return null;
+  }
+
+  return `#${raw}`;
+}
+
+function filamentColors(spool) {
+  const filament = filamentOf(spool);
+
+  const multiple = String(filament.multi_color_hexes || "")
+    .split(",")
+    .map(normalizeHex)
+    .filter(Boolean);
+
+  if (multiple.length > 0) {
+    return multiple;
+  }
+
+  const single = normalizeHex(filament.color_hex);
+
+  return single ? [single] : ["#64748b"];
+}
+
+function multiColorDirection(spool) {
+  return String(
+    filamentOf(spool).multi_color_direction || ""
+  ).trim().toLowerCase();
+}
+
+function directionInfo(direction) {
+  const value = String(direction || "").trim().toLowerCase();
+
+  const labels = {
+    coaxial: "Коаксиальный",
+    longitudinal: "Продольный",
+    linear: "Смена по длине",
+    gradient: "Градиентный",
+    rainbow: "Радужный",
+    sequential: "Последовательный",
+    alternating: "Чередующийся",
+    random: "Случайная смена"
+  };
+
+  const sequentialDirections = [
+    "linear",
+    "gradient",
+    "rainbow",
+    "sequential",
+    "alternating",
+    "random",
+    "change"
+  ];
+
+  return {
+    raw: value,
+    label: labels[value] || (value ? value.toUpperCase() : "Многоцветный"),
+    sequential: sequentialDirections.some(
+      item => value === item || value.includes(item)
+    )
+  };
+}
+
+function sharpLinearGradient(colors) {
+  const segment = 100 / colors.length;
+  const stops = [];
+
+  colors.forEach((color, index) => {
+    const start = (segment * index).toFixed(3);
+    const end = (segment * (index + 1)).toFixed(3);
+
+    stops.push(`${color} ${start}%`);
+    stops.push(`${color} ${end}%`);
+  });
+
+  return `linear-gradient(90deg, ${stops.join(", ")})`;
+}
+
+function spoolVisual(spool) {
+  const colors = filamentColors(spool);
+  const direction = directionInfo(multiColorDirection(spool));
+  const multicolor = colors.length > 1;
+
+  if (!multicolor) {
+    return {
+      background: colors[0],
+      progress: colors[0],
+      multicolor: false,
+      label: "",
+      directionRaw: "",
+      colorCount: 1
+    };
+  }
+
+  if (direction.sequential) {
+    const ringColors = [...colors, colors[0]].join(", ");
+
+    return {
+      background: `conic-gradient(from 0deg, ${ringColors})`,
+      progress: `linear-gradient(90deg, ${colors.join(", ")})`,
+      multicolor: true,
+      label: direction.label,
+      directionRaw: direction.raw,
+      colorCount: colors.length
+    };
+  }
+
+  const segment = 100 / colors.length;
+  const sectors = colors.map((color, index) => {
+    const start = (segment * index).toFixed(3);
+    const end = (segment * (index + 1)).toFixed(3);
+
+    return `${color} ${start}% ${end}%`;
+  });
+
+  return {
+    background: `conic-gradient(from -90deg, ${sectors.join(", ")})`,
+    progress: sharpLinearGradient(colors),
+    multicolor: true,
+    label: direction.label,
+    directionRaw: direction.raw,
+    colorCount: colors.length
+  };
+}
+
+function colorCountText(count) {
+  const number = Number(count);
+
+  if (number % 10 === 1 && number % 100 !== 11) {
+    return `${number} цвет`;
+  }
+
+  if (
+    [2, 3, 4].includes(number % 10) &&
+    ![12, 13, 14].includes(number % 100)
+  ) {
+    return `${number} цвета`;
+  }
+
+  return `${number} цветов`;
+}
+
+function formatWeight(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return "—";
+  }
+
+  if (number >= 1000) {
+    const kg = number / 1000;
+    return `${kg % 1 === 0 ? kg.toFixed(0) : kg.toFixed(2)} кг`;
+  }
+
+  return `${Math.round(number)} г`;
+}
+
+function displayName(spool) {
+  if (!spool) {
+    return "Не назначено";
+  }
+
+  const filament = filamentOf(spool);
+  const vendor = filament.vendor?.name || "Без производителя";
+  const name = filament.name || "Без названия";
+
+  return `${vendor} · ${name}`;
+}
+
+function optionText(spool) {
+  const filament = filamentOf(spool);
+  const vendor = filament.vendor?.name || "Без производителя";
+  const name = filament.name || "Без названия";
+  const material = filament.material || "?";
+
+  return `ID ${spool.id} — ${vendor} / ${name} / ${material} — ${formatWeight(spool.remaining_weight)}`;
+}
+
+function searchText(spool) {
+  const filament = filamentOf(spool);
+
+  return [
+    spool.id,
+    filament.vendor?.name,
+    filament.name,
+    filament.material,
+    filament.color_hex
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function usedElsewhere(spoolId, currentSlot) {
+  if (spoolId === null) {
+    return false;
+  }
+
+  for (let slot = 1; slot <= SLOT_COUNT; slot += 1) {
+    if (
+      slot !== currentSlot &&
+      Number(draftAssignments[String(slot)]) === Number(spoolId)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function availableSpools(slot) {
+  const selectedId = draftAssignments[String(slot)];
+
+  return spools.filter(spool => {
+    if (spool.archived) {
+      return false;
+    }
+
+    const matches =
+      !searchQuery || searchText(spool).includes(searchQuery);
+
+    const selectable =
+      Number(spool.id) === Number(selectedId) ||
+      !usedElsewhere(spool.id, slot);
+
+    return matches && selectable;
+  });
+}
+
+function buildOptions(slot) {
+  const selectedId = draftAssignments[String(slot)];
+  const options = [`<option value="">Не назначено</option>`];
+  const available = availableSpools(slot);
+  const selectedSpool = getSpool(selectedId);
+
+  if (
+    selectedSpool &&
+    !available.some(item => Number(item.id) === Number(selectedId))
+  ) {
+    options.push(
+      `<option value="${selectedSpool.id}" selected>` +
+      `${escapeHtml(optionText(selectedSpool))}</option>`
+    );
+  }
+
+  for (const spool of available) {
+    const selected =
+      Number(spool.id) === Number(selectedId)
+        ? " selected"
+        : "";
+
+    options.push(
+      `<option value="${spool.id}"${selected}>` +
+      `${escapeHtml(optionText(spool))}</option>`
+    );
+  }
+
+  return options.join("");
+}
+
+function renderSlot(slot) {
+  const spoolId = draftAssignments[String(slot)];
+  const spool = getSpool(spoolId);
+  const filament = filamentOf(spool);
+  const active = Number(statusData?.active_slot) === slot;
+
+  const changed =
+    (originalAssignments[String(slot)] ?? null) !==
+    (draftAssignments[String(slot)] ?? null);
+
+  const remaining = Number(spool?.remaining_weight);
+  const initial = Number(spool?.initial_weight);
+
+  const percent =
+    Number.isFinite(remaining) &&
+    Number.isFinite(initial) &&
+    initial > 0
+      ? Math.max(0, Math.min(100, remaining / initial * 100))
+      : 0;
+
+  const vendor = filament.vendor?.name || "Катушка не выбрана";
+  const name =
+    filament.name || "Назначь катушку Spoolman этому слоту";
+
+  const material = filament.material || "—";
+  const visual = spoolVisual(spool);
+
+  const percentClass =
+    percent < 10
+      ? " critical"
+      : percent < 30
+        ? " low"
+        : "";
+
+  return `
+    <article
+      class="slot-card${active ? " active" : ""}${changed ? " changed" : ""}"
+      style="--spool-background:${escapeHtml(visual.background)};--progress-background:${escapeHtml(visual.progress)}"
+    >
+      <header class="slot-header">
+        <div class="slot-title-wrap">
+          <div class="slot-number">${slot}</div>
+
+          <div>
+            <div class="slot-name">IFS ${slot}</div>
+            <div class="slot-state">
+              ${active ? "Используется экструдером" : "Физический канал IFS"}
+            </div>
+          </div>
+        </div>
+
+        <div class="active-badge">
+          <span>●</span>
+          Активный
+        </div>
+      </header>
+
+      <div class="preview${spool ? "" : " empty-preview"}">
+        <div class="spool${spool ? "" : " empty"}"></div>
+
+        <div class="filament-info">
+          ${spool
+            ? `
+              <div class="filament-name" title="${escapeHtml(name)}">
+                ${escapeHtml(name)}
+              </div>
+
+              <div class="filament-vendor" title="${escapeHtml(vendor)}">
+                ${escapeHtml(vendor)}
+              </div>
+            `
+            : `
+              <div class="empty-message">
+                <strong>Катушка не назначена</strong>
+                Выбери катушку Spoolman в списке ниже.
+              </div>
+            `}
+
+          <div class="meta">
+            <span class="pill">${escapeHtml(material)}</span>
+            <span class="pill">
+              ${spool ? `ID ${spool.id}` : "Без назначения"}
+            </span>
+            ${visual.multicolor
+              ? `
+                <span
+                  class="pill multicolor-pill"
+                  title="Spoolman: ${escapeHtml(visual.directionRaw || "не указано")}"
+                >
+                  ${escapeHtml(visual.label)}
+                </span>
+                <span class="pill color-count-pill">
+                  ${escapeHtml(colorCountText(visual.colorCount))}
+                </span>
+              `
+              : ""}
+          </div>
+
+          <div class="weight">
+            <div class="weight-line">
+              <span>Остаток</span>
+              <span class="weight-value">
+                ${spool
+                  ? `${formatWeight(remaining)} / ${formatWeight(initial)}` +
+                    `<span class="stock-percent${percentClass}">${Math.round(percent)}%</span>`
+                  : "—"}
+              </span>
+            </div>
+
+            <div class="progress">
+              <div
+                class="progress-value"
+                style="width:${percent.toFixed(1)}%"
+              ></div>
+            </div>
+
+            ${spool && percent < 30
+              ? `
+                <div class="stock-warning visible${percent < 10 ? " critical" : ""}">
+                  <span>●</span>
+                  ${percent < 10
+                    ? "Критически малый остаток"
+                    : "Низкий остаток филамента"}
+                </div>
+              `
+              : ""}
+          </div>
+        </div>
+      </div>
+
+      <label class="field-label" for="slotSelect${slot}">
+        Катушка Spoolman
+      </label>
+
+      <select
+        class="select slot-select"
+        id="slotSelect${slot}"
+        data-slot="${slot}"
+      >
+        ${buildOptions(slot)}
+      </select>
+    </article>
+  `;
+}
+
+function renderSlots() {
+  el("slotsGrid").innerHTML =
+    Array.from(
+      { length: SLOT_COUNT },
+      (_, index) => renderSlot(index + 1)
+    ).join("");
+
+  document.querySelectorAll(".slot-select").forEach(select => {
+    select.addEventListener("change", event => {
+      const slot = Number(event.currentTarget.dataset.slot);
+      const value = event.currentTarget.value;
+
+      draftAssignments[String(slot)] =
+        value === "" ? null : Number(value);
+
+      renderAll();
+    });
+  });
+}
+
+function renderSummary() {
+  const activeSlot = statusData?.active_slot;
+  const activeSpool = getSpool(statusData?.moonraker_spool_id);
+
+  el("summarySlot").textContent =
+    activeSlot ? `IFS ${activeSlot}` : "Не определён";
+
+  el("summarySpool").textContent =
+    activeSpool
+      ? displayName(activeSpool)
+      : statusData?.moonraker_spool_id
+        ? `ID ${statusData.moonraker_spool_id}`
+        : "Не выбрана";
+
+  const assignedCount = Object.values(draftAssignments)
+    .filter(value => value !== null)
+    .length;
+
+  el("summaryAssigned").textContent =
+    `${assignedCount} из ${SLOT_COUNT}`;
+}
+
+function renderConnection() {
+  const connected = Boolean(statusData?.spoolman_connected);
+  const node = el("connection");
+
+  node.classList.toggle("online", connected);
+  node.classList.toggle("offline", !connected);
+
+  el("connectionText").textContent =
+    connected ? "Spoolman подключён" : "Нет связи со Spoolman";
+}
+
+function renderDiagnostics() {
+  el("diagSlot").textContent =
+    statusData?.active_slot ?? "—";
+
+  el("diagSpool").textContent =
+    statusData?.moonraker_spool_id ?? "—";
+
+  el("diagConnection").textContent =
+    statusData?.spoolman_connected ? "Подключено" : "Нет связи";
+
+  const lastSwitch = statusData?.last_switch;
+
+  el("diagSwitch").textContent =
+    lastSwitch
+      ? `${lastSwitch.time} · IFS ${lastSwitch.slot} → ID ${lastSwitch.spool_id}`
+      : "В этой сессии не выполнялась";
+
+  el("diagError").textContent =
+    statusData?.last_error || "Нет";
+}
+
+function renderSearchCount() {
+  const visible = spools.filter(spool => {
+    if (spool.archived) {
+      return false;
+    }
+
+    return !searchQuery || searchText(spool).includes(searchQuery);
+  }).length;
+
+  el("searchCount").textContent =
+    searchQuery
+      ? `Найдено: ${visible}`
+      : `Катушек: ${visible}`;
+}
+
+function renderChangeState() {
+  const changed = hasChanges();
+
+  el("saveButton").disabled = !changed;
+  el("resetButton").disabled = !changed;
+  el("unsavedBanner").classList.toggle("visible", changed);
+}
+
+function renderAll() {
+  renderSummary();
+  renderConnection();
+  renderSlots();
+  renderDiagnostics();
+  renderSearchCount();
+  renderChangeState();
+}
+
+async function loadData({
+  showLoader = false,
+  preserveDraft = false,
+  notify = false
+} = {}) {
+  if (requestInProgress) {
+    return;
+  }
+
+  requestInProgress = true;
+
+  if (showLoader) {
+    setLoading(true, "Получение данных Spoolman…");
+  }
+
+  try {
+    const [newSpools, newStatus] = await Promise.all([
+      api("/api/spools"),
+      api("/api/status")
+    ]);
+
+    const previousDraft = { ...draftAssignments };
+    const hadChanges = hasChanges();
+
+    spools = Array.isArray(newSpools) ? newSpools : [];
+    statusData = newStatus;
+
+    originalAssignments =
+      normalizeAssignments(newStatus.assignments);
+
+    draftAssignments =
+      preserveDraft && hadChanges
+        ? previousDraft
+        : { ...originalAssignments };
+
+    renderAll();
+
+    if (notify) {
+      showToast(
+        "success",
+        "Данные обновлены",
+        `Загружено катушек: ${spools.length}`
+      );
+    }
+  } catch (error) {
+    showToast(
+      "error",
+      "Не удалось загрузить данные",
+      error instanceof Error ? error.message : String(error)
+    );
+
+    el("connection").classList.add("offline");
+    el("connectionText").textContent = "Ошибка подключения";
+  } finally {
+    requestInProgress = false;
+
+    if (showLoader) {
+      setLoading(false);
+    }
+  }
+}
+
+async function saveAssignments() {
+  if (!hasChanges()) {
+    return;
+  }
+
+  const changedSlots = [];
+
+  for (let slot = 1; slot <= SLOT_COUNT; slot += 1) {
+    const key = String(slot);
+
+    if (
+      (originalAssignments[key] ?? null) !==
+      (draftAssignments[key] ?? null)
+    ) {
+      changedSlots.push(slot);
+    }
+  }
+
+  const activeSlot = Number(statusData?.active_slot);
+
+  if (
+    changedSlots.includes(activeSlot) &&
+    draftAssignments[String(activeSlot)] === null
+  ) {
+    const confirmed = window.confirm(
+      `Активный слот IFS ${activeSlot} останется без катушки Spoolman. ` +
+      `Moonraker не сможет синхронизировать текущую катушку. Продолжить?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  setLoading(true, "Сохранение назначений…");
+
+  try {
+    for (const slot of changedSlots) {
+      await api("/api/assign", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          slot,
+          spool_id: draftAssignments[String(slot)]
+        })
+      });
+    }
+
+    await loadData();
+
+    showToast(
+      "success",
+      "Изменения сохранены",
+      `Обновлено слотов: ${changedSlots.length}`
+    );
+  } catch (error) {
+    showToast(
+      "error",
+      "Ошибка сохранения",
+      error instanceof Error ? error.message : String(error)
+    );
+
+    await loadData({
+      preserveDraft: true
+    });
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function synchronize() {
+  setLoading(true, "Синхронизация активного слота…");
+
+  try {
+    await api("/api/sync", {
+      method: "POST"
+    });
+
+    await loadData({
+      preserveDraft: true
+    });
+
+    showToast(
+      "success",
+      "Синхронизация выполнена",
+      "Активный слот сопоставлен с катушкой Spoolman"
+    );
+  } catch (error) {
+    showToast(
+      "error",
+      "Ошибка синхронизации",
+      error instanceof Error ? error.message : String(error)
+    );
+  } finally {
+    setLoading(false);
+  }
+}
+
+el("searchInput").addEventListener("input", event => {
+  searchQuery = event.currentTarget.value.trim().toLowerCase();
+  renderSlots();
+  renderSearchCount();
+});
+
+el("refreshButton").addEventListener("click", () => {
+  loadData({
+    showLoader: true,
+    preserveDraft: true,
+    notify: true
+  });
+});
+
+el("resetButton").addEventListener("click", () => {
+  draftAssignments = { ...originalAssignments };
+  renderAll();
+
+  showToast(
+    "success",
+    "Изменения отменены",
+    "Восстановлены последние сохранённые назначения"
+  );
+});
+
+el("saveButton").addEventListener("click", saveAssignments);
+el("syncButton").addEventListener("click", synchronize);
+
+window.addEventListener("beforeunload", event => {
+  if (!hasChanges()) {
+    return;
+  }
+
+  event.preventDefault();
+  event.returnValue = "";
+});
+
+loadData({
+  showLoader: true
+});
+
+setInterval(() => {
+  loadData({
+    preserveDraft: true
+  });
+}, 5000);
+</script>
+</body>
+</html>
