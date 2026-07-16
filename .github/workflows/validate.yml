@@ -1,0 +1,27 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Python backend
+        run: python3 -m py_compile plugin/ifs_spoolman.py
+      - name: Check POSIX shell syntax
+        run: |
+          sh -n install.sh
+          sh -n update.sh
+          for file in scripts/*.sh; do sh -n "$file"; done
+      - name: Validate example JSON
+        run: |
+          python3 -m json.tool examples/config.example.json >/dev/null
+          python3 -m json.tool examples/assignments.example.json >/dev/null
+      - name: Reject private runtime artifacts
+        run: |
+          test ! -e config.json
+          test ! -e assignments.json
+          ! find . -type f \( -name '*.log' -o -name '*.pid' -o -name '*.pyc' -o -name '*.bak_*' \) | grep .
