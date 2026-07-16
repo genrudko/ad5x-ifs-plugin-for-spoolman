@@ -6,6 +6,19 @@
 
 > **Бета-версия.** Проект не связан с Flashforge, Spoolman, Moonraker, Fluidd или Z-Mod и не является официально поддерживаемым ими продуктом.
 
+## Перед установкой обязательно нужен Spoolman
+
+Плагин **не устанавливает Spoolman** и не может работать без него.
+
+До установки плагина необходимо:
+
+1. установить и запустить Spoolman на ПК, NAS, Raspberry Pi, домашнем сервере или VPS;
+2. добавить URL сервера Spoolman в `moonraker.conf`;
+3. перезапустить Moonraker;
+4. убедиться, что Moonraker возвращает `"spoolman_connected": true`.
+
+Подробная пошаговая инструкция: [обязательная настройка Spoolman](docs/spoolman_RU.md).
+
 ## Возможности
 
 - Определение активного канала IFS на AD5X.
@@ -23,34 +36,47 @@
 ## Требования
 
 - Flashforge AD5X / Adventurer 5X.
-- Установленный Z-Mod с рабочими Moonraker и Fluidd.
-- Moonraker, подключённый к серверу Spoolman.
+- Установленный чистый Z-Mod с рабочими Moonraker и Fluidd.
+- Предварительно установленный и настроенный Spoolman.
+- Активное соединение Moonraker со Spoolman.
 - Root-доступ к принтеру по SSH.
+- Доступ принтера к GitHub для автоматической загрузки.
 
-## Установка
+## Самая простая установка на чистый Z-Mod
 
-Скопируйте или клонируйте репозиторий на принтер, перейдите в его каталог и выполните:
+Подключитесь к принтеру по SSH как `root` и вставьте одну команду:
 
 ```sh
-chmod +x install.sh update.sh scripts/*.sh
-./install.sh
+wget -qO /tmp/ad5x-ifs-install.sh https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
 
-Рабочие файлы устанавливаются в:
+Скрипт самостоятельно:
 
-```text
-/usr/data/config/mod_data/ifs_spoolman
-```
+- проверит, что запущен Moonraker;
+- проверит реальное подключение Moonraker к Spoolman;
+- загрузит репозиторий без необходимости устанавливать `git`;
+- распакует его совместимым с BusyBox способом;
+- установит и запустит плагин.
 
-Веб-интерфейс:
+На чистом Z-Mod утилита `git` может отсутствовать, а встроенный `tar` может не поддерживать ключ `-z`, поэтому этот способ является рекомендуемым.
+
+После установки откройте:
 
 ```text
 http://IP_ПРИНТЕРА:7913/
 ```
 
-Подробности: [docs/installation_RU.md](docs/installation_RU.md).
+Подробная установка, ручная загрузка и вариант с `git clone`: [docs/installation_RU.md](docs/installation_RU.md).
+
+## Проверка состояния
+
+```sh
+/usr/data/config/mod_data/ifs_spoolman/status.sh
+```
 
 ## Обновление
+
+Загрузите свежую копию репозитория способом из инструкции, перейдите в её каталог и выполните:
 
 ```sh
 ./update.sh --dry-run
@@ -58,12 +84,6 @@ http://IP_ПРИНТЕРА:7913/
 ```
 
 `config.json` и `assignments.json` сохраняются. Перед обновлением создаётся резервная копия; при неудачном запуске или провале health-check выполняется автоматический откат.
-
-## Проверка состояния
-
-```sh
-/usr/data/config/mod_data/ifs_spoolman/status.sh
-```
 
 ## Удаление
 
@@ -86,8 +106,9 @@ http://IP_ПРИНТЕРА:7913/
 
 ## Документация
 
+- [Обязательная настройка Spoolman](docs/spoolman_RU.md)
 - [Установка и обновление](docs/installation_RU.md)
-- [Настройка](docs/configuration_RU.md)
+- [Настройка плагина](docs/configuration_RU.md)
 - [Интеграция с Fluidd](docs/fluidd-integration_RU.md)
 - [HTTP API](docs/api_RU.md)
 - [Архитектура](docs/architecture_RU.md)
