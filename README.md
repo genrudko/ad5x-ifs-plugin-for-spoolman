@@ -40,17 +40,28 @@ See the [mandatory Spoolman setup guide](docs/spoolman.md).
 - Spoolman installed and configured beforehand.
 - Active Moonraker-to-Spoolman connection.
 - Root SSH access to the printer.
-- Printer access to GitHub for automatic download.
+- Printer access to `raw.githubusercontent.com`.
 
-## Easiest installation on clean Z-Mod
+## One command for installation and update
 
 Connect over SSH as `root` and run:
 
 ```sh
-wget -qO /tmp/ad5x-ifs-install.sh https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
 
-The helper verifies Moonraker and Spoolman, downloads the repository without requiring git, extracts it using BusyBox-compatible commands, and installs the plugin.
+The `?cb=$(date +%s)` parameter prevents an old cached installer from being returned.
+
+The helper:
+
+- verifies Moonraker and Spoolman;
+- downloads only the required files directly from `raw.githubusercontent.com`;
+- does not require git or `codeload.github.com`;
+- adds cache-busting to every downloaded file;
+- installs a new copy through `install.sh`;
+- updates an existing copy through `update.sh`, including backup, health check, and automatic rollback.
+
+`config.json` and `assignments.json` are preserved during updates. Klipper, the MCU, Moonraker, Spoolman, and Z-Mod are not reinstalled or removed.
 
 Open the management UI at:
 
@@ -58,7 +69,7 @@ Open the management UI at:
 http://PRINTER_IP:7913/
 ```
 
-Detailed instructions, manual download, and the optional `git clone` method: [docs/installation.md](docs/installation.md).
+Detailed instructions: [docs/installation.md](docs/installation.md).
 
 ## Status
 
@@ -66,16 +77,16 @@ Detailed instructions, manual download, and the optional `git clone` method: [do
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
-## Update
+## Manual update
 
-From a refreshed checkout or extracted repository:
+From a refreshed checkout:
 
 ```sh
 ./update.sh --dry-run
 ./update.sh
 ```
 
-`config.json` and `assignments.json` are preserved. The updater creates a timestamped backup and performs rollback if the service or health endpoint fails.
+The updater creates a timestamped backup and rolls back automatically if startup or the health check fails.
 
 ## Uninstall
 
