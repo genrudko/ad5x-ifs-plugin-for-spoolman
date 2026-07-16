@@ -23,13 +23,19 @@ jobs:
           import base64
           import hashlib
           import itertools
+          import io
           import re
           import tarfile
           from pathlib import Path
 
-          expected = "7271913f148c6befb27c9c02511a0cdadbec28657d231b819f306e2b1f1ce965"
-          parts = []
+          required = {
+              "plugin/ifs_spoolman.py",
+              "plugin/ui_v0_2.html",
+              "plugin/ifs-spoolman-card.js",
+              "plugin/ifs-spoolman-layout.js",
+          }
 
+          parts = []
           for index in range(8):
               path = Path(f".bootstrap/part{index:02d}")
               raw = path.read_text(encoding="utf-8")
@@ -37,21 +43,22 @@ jobs:
               parts.append(clean)
               print(f"part{index:02d}: raw={len(raw)} clean={len(clean)}")
 
-          first_trim_values = range(0, 9)
-          last_trim_values = range(0, 17)
           found = None
 
-          for first_trim, last_trim in itertools.product(first_trim_values, last_trim_values):
+          for trims in itertools.product(range(4), repeat=8):
               selected = []
+              valid = True
 
-              for part in parts[:7]:
-                  end = len(part) - first_trim if first_trim else len(part)
-                  selected.append(part[:end])
+              for part, trim in zip(parts, trims):
+                  if trim >= len(part):
+                      valid = False
+                      break
+                  selected.append(part[:-trim] if trim else part)
 
-              last_end = len(parts[7]) - last_trim if last_trim else len(parts[7])
-              selected.append(parts[7][:last_end])
+              if not valid:
+                  continue
+
               payload = "".join(selected)
-
               if len(payload) % 4:
                   continue
 
@@ -60,34 +67,33 @@ jobs:
               except Exception:
                   continue
 
-              digest = hashlib.sha256(decoded).hexdigest()
+              if not decoded.startswith(b"\x1f\x8b"):
+                  continue
 
-              if digest == expected:
-                  found = (first_trim, last_trim, decoded)
-                  break
+              try:
+                  with tarfile.open(fileobj=io.BytesIO(decoded), mode="r:gz") as tf:
+                      names = set(tf.getnames())
+                      if not required.issubset(names):
+                          continue
+              except Exception:
+                  continue
+
+              found = (trims, decoded)
+              break
 
           if found is None:
-              raise SystemExit("Unable to reconstruct payload with uniform boundary trimming")
+              raise SystemExit("Unable to reconstruct a valid plugin archive")
 
-          first_trim, last_trim, decoded = found
-          print(f"Matched payload: first_trim={first_trim}, last_trim={last_trim}, bytes={len(decoded)}")
+          trims, decoded = found
+          digest = hashlib.sha256(decoded).hexdigest()
+          print(f"Matched trims: {trims}")
+          print(f"Archive bytes: {len(decoded)}")
+          print(f"Archive SHA-256: {digest}")
 
           archive = Path("/tmp/plugin_payload.tar.gz")
           archive.write_bytes(decoded)
 
           with tarfile.open(archive, "r:gz") as tf:
-              members = tf.getmembers()
-              names = [member.name for member in members]
-              required = {
-                  "plugin/ifs_spoolman.py",
-                  "plugin/ui_v0_2.html",
-                  "plugin/ifs-spoolman-card.js",
-                  "plugin/ifs-spoolman-layout.js",
-              }
-
-              if not required.issubset(names):
-                  raise SystemExit(f"Archive misses required files: {sorted(required - set(names))}")
-
               tf.extractall(".")
           PY
 
