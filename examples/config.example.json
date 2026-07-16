@@ -1,0 +1,18 @@
+{
+  "event_log_backup_count": 3,
+  "event_log_max_bytes": 524288,
+  "fluidd_integration": true,
+  "http_timeout": 5.0,
+  "listen_host": "0.0.0.0",
+  "listen_port": 7913,
+  "moonraker_url": "http://127.0.0.1:7125",
+  "poll_interval": 1.0,
+  "schema_version": 1,
+  "slot_count": 4,
+  "spoolman_proxy_timeout": 10.0,
+  "switch_confirmation_interval": 0.25,
+  "switch_confirmation_reads": 3,
+  "switch_cooldown": 2.0,
+  "sync_retry_count": 3,
+  "sync_retry_delay": 1.0
+}
