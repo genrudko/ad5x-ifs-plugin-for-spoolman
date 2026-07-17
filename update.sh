@@ -19,7 +19,7 @@ case "${1:-}" in
         ;;
 esac
 
-PLUGIN_FILES="ifs_spoolman.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
+PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
 SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh"
 
 for FILE in $PLUGIN_FILES; do [ -f "$REPO_DIR/plugin/$FILE" ] || { echo "Missing plugin/$FILE"; exit 1; }; done
@@ -61,6 +61,11 @@ chmod +x "$TARGET_DIR"/*.sh
 if ! "$TARGET_DIR/start.sh"; then rollback; exit 1; fi
 sleep 3
 if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then rollback; exit 1; fi
+
+if ! wget -qO- http://127.0.0.1:7913/api/filament/capabilities >/dev/null 2>&1; then
+    rollback
+    exit 1
+fi
 
 echo "$APP_NAME updated."
 echo "Backup: $BACKUP_DIR"
