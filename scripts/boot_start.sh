@@ -6,7 +6,7 @@ APP_DIR="/opt/config/mod_data/ifs_spoolman"
 PID_FILE="$APP_DIR/ifs_spoolman.pid"
 LOG_FILE="$APP_DIR/ifs_spoolman.log"
 PYTHON="/root/moonraker-env/bin/python3"
-PROGRAM="$APP_DIR/ifs_spoolman.py"
+PROGRAM="$APP_DIR/ifs_spoolman_runtime.py"
 
 if [ -x "$APP_DIR/install_fluidd_card.sh" ]; then
     "$APP_DIR/install_fluidd_card.sh" \
@@ -47,6 +47,11 @@ fi
 
 if [ ! -f "$PROGRAM" ]; then
     echo "$APP_NAME: не найден backend: $PROGRAM"
+    exit 1
+fi
+
+if [ ! -f "$APP_DIR/ifs_spoolman.py" ]; then
+    echo "$APP_NAME: не найден базовый backend: $APP_DIR/ifs_spoolman.py"
     exit 1
 fi
 
