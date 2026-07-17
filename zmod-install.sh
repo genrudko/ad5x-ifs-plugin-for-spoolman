@@ -83,6 +83,7 @@ for FILE in \
     VERSION \
     PACKAGE_MANIFEST.txt \
     plugin/ifs_spoolman.py \
+    plugin/ifs_spoolman_runtime.py \
     plugin/ui_v0_2.html \
     plugin/ifs-spoolman-card.js \
     plugin/ifs-spoolman-layout.js \
