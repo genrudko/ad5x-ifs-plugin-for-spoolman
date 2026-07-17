@@ -87,6 +87,7 @@ for FILE in \
     plugin/ifs-spoolman-card.js \
     plugin/ifs-spoolman-layout.js \
     plugin/ifs-spoolman-visibility.js \
+    plugin/ifs-spoolman-selection.js \
     scripts/boot_start.sh \
     scripts/start.sh \
     scripts/stop.sh \
