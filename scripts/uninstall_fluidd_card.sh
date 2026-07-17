@@ -17,7 +17,7 @@ text = index_path.read_text(encoding="utf-8")
 
 text = re.sub(
     r'\s*<script[^>]+src=["\'][^"\']*'
-    r'ifs-spoolman-(?:card|layout)[^"\']*'
+    r'ifs-spoolman-(?:card|layout|visibility)[^"\']*'
     r'["\'][^>]*></script>',
     "",
     text,
@@ -29,6 +29,7 @@ fi
 
 rm -f \
     "$FLUIDD_DIR"/ifs-spoolman-card*.js \
-    "$FLUIDD_DIR"/ifs-spoolman-layout*.js
+    "$FLUIDD_DIR"/ifs-spoolman-layout*.js \
+    "$FLUIDD_DIR"/ifs-spoolman-visibility*.js
 
 echo "$APP_NAME: интеграция Fluidd удалена."
