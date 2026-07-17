@@ -58,6 +58,16 @@ else
 fi
 
 echo
+echo "--- Filament capabilities (read-only) ---"
+
+if wget -qO- "$API/api/filament/capabilities?refresh=1"; then
+    echo
+else
+    echo "UNAVAILABLE"
+    EXIT_CODE=1
+fi
+
+echo
 echo "--- Fluidd integration ---"
 
 MOON_PID=""
