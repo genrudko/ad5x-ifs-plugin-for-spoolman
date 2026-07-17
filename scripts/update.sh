@@ -29,9 +29,12 @@ esac
 
 REQUIRED_FILES="
 ifs_spoolman.py
+ifs_spoolman_runtime.py
 ui_v0_2.html
 ifs-spoolman-card.js
 ifs-spoolman-layout.js
+ifs-spoolman-visibility.js
+ifs-spoolman-selection.js
 install_fluidd_card.sh
 uninstall_fluidd_card.sh
 boot_start.sh
@@ -109,6 +112,14 @@ sleep 3
 
 if ! wget -qO- \
     http://127.0.0.1:7913/api/health \
+    >/dev/null 2>&1
+then
+    rollback
+    exit 1
+fi
+
+if ! wget -qO- \
+    http://127.0.0.1:7913/api/filament/capabilities \
     >/dev/null 2>&1
 then
     rollback
