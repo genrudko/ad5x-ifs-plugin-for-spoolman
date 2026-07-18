@@ -3,7 +3,7 @@ set -eu
 
 REPO_OWNER="genrudko"
 REPO_NAME="ad5x-ifs-plugin-for-spoolman"
-REF="main"
+REF="feature/filament-manager"
 RAW_BASE="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/$REF"
 CACHE_BUSTER="$(date +%s 2>/dev/null || echo "$$")"
 WORK_DIR="/usr/data/ad5x-ifs-plugin-installer"
@@ -38,7 +38,9 @@ download_file() {
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Plugin for Spoolman — установка/обновление для Z-Mod ==="
+echo "=== AD5X IFS Plugin for Spoolman — тестовая ветка filament-manager ==="
+
+echo "Источник: $REF"
 
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
@@ -75,7 +77,7 @@ echo "Spoolman: подключён"
 rm -rf "$WORK_DIR"
 mkdir -p "$SOURCE_DIR"
 
-echo "Загрузка файлов репозитория через raw.githubusercontent.com..."
+echo "Загрузка файлов тестовой ветки через raw.githubusercontent.com..."
 
 for FILE in \
     install.sh \
@@ -109,18 +111,19 @@ chmod +x "$SOURCE_DIR/install.sh" "$SOURCE_DIR/update.sh" "$SOURCE_DIR"/scripts/
 cd "$SOURCE_DIR"
 
 if [ -d "$TARGET_DIR" ] && [ -f "$TARGET_DIR/ifs_spoolman.py" ]; then
-    echo "Обнаружена существующая установка: выполняется безопасное обновление."
+    echo "Обнаружена существующая установка: выполняется безопасное тестовое обновление."
     ./update.sh --dry-run
     ./update.sh
-    RESULT_TEXT="Обновление завершено"
+    RESULT_TEXT="Тестовое обновление завершено"
 else
-    echo "Существующая установка не обнаружена: выполняется новая установка."
+    echo "Существующая установка не обнаружена: выполняется тестовая установка."
     ./install.sh
-    RESULT_TEXT="Установка завершена"
+    RESULT_TEXT="Тестовая установка завершена"
 fi
 
 echo
 echo "=== $RESULT_TEXT ==="
+echo "Ветка: $REF"
 echo "Откройте: http://IP_ПРИНТЕРА:7913/"
 echo "Проверка состояния:"
 echo "$TARGET_DIR/status.sh"
