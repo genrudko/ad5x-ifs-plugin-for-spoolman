@@ -13,7 +13,7 @@ import urllib.parse
 import ifs_spoolman as core
 
 
-RUNTIME_VERSION = "0.6.0-beta"
+RUNTIME_VERSION = "0.7.0-beta"
 CAPABILITY_CACHE_SECONDS = 5.0
 
 MACRO_CANDIDATES = {
