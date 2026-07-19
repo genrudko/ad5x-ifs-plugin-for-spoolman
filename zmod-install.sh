@@ -3,7 +3,7 @@ set -eu
 
 REPO_OWNER="genrudko"
 REPO_NAME="ad5x-ifs-plugin-for-spoolman"
-REF="main"
+REF="feature/dashboard-only-collapse"
 RAW_BASE="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/$REF"
 CACHE_BUSTER="$(date +%s 2>/dev/null || echo "$$")"
 WORK_DIR="/usr/data/ad5x-ifs-plugin-installer"
@@ -38,7 +38,7 @@ download_file() {
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Plugin for Spoolman — установка/обновление для Z-Mod ==="
+echo "=== AD5X IFS Plugin for Spoolman — тест Dashboard-only + collapse ==="
 
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
@@ -53,18 +53,7 @@ if ! printf '%s' "$SPOOLMAN_STATUS" | grep -Eq '"spoolman_connected"[[:space:]]*
     cat >&2 <<'EOF'
 ОШИБКА: Moonraker не подключён к Spoolman.
 
-Плагин не заменяет Spoolman и не устанавливает его автоматически.
-Перед установкой плагина обязательно:
-
-1. установить и запустить Spoolman на ПК, NAS, VPS или другом сервере;
-2. добавить в moonraker.conf:
-
-   [spoolman]
-   server: http://IP_СЕРВЕРА_SPOOLMAN:7912
-
-3. перезапустить Moonraker;
-4. убедиться, что /server/spoolman/status возвращает
-   "spoolman_connected": true.
+Этот тестовый патч основан на рабочей версии 0.6.2 и не меняет её карточку.
 EOF
     exit 1
 fi
@@ -75,7 +64,7 @@ echo "Spoolman: подключён"
 rm -rf "$WORK_DIR"
 mkdir -p "$SOURCE_DIR"
 
-echo "Загрузка файлов репозитория через raw.githubusercontent.com..."
+echo "Загрузка файлов тестовой ветки..."
 
 for FILE in \
     install.sh \
@@ -86,6 +75,7 @@ for FILE in \
     plugin/ui_v0_2.html \
     plugin/ifs-spoolman-card.js \
     plugin/ifs-spoolman-layout.js \
+    plugin/ifs-spoolman-dashboard.js \
     plugin/ifs-spoolman-visibility.js \
     plugin/ifs-spoolman-selection.js \
     scripts/boot_start.sh \
@@ -120,6 +110,8 @@ fi
 
 echo
 echo "=== $RESULT_TEXT ==="
+echo "Исходная карточка 0.6.2 сохранена без изменений."
+echo "Добавлены только Dashboard-only и сворачивание."
 echo "Откройте: http://IP_ПРИНТЕРА:7913/"
 echo "Проверка состояния:"
 echo "$TARGET_DIR/status.sh"
