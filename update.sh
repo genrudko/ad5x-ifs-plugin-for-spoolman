@@ -19,11 +19,22 @@ case "${1:-}" in
         ;;
 esac
 
-PLUGIN_FILES="ifs_spoolman.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
+PLUGIN_FILES="ifs_spoolman.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
 SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh"
 
-for FILE in $PLUGIN_FILES; do [ -f "$REPO_DIR/plugin/$FILE" ] || { echo "Missing plugin/$FILE"; exit 1; }; done
-for FILE in $SCRIPT_FILES; do [ -f "$REPO_DIR/scripts/$FILE" ] || { echo "Missing scripts/$FILE"; exit 1; }; done
+for FILE in $PLUGIN_FILES; do
+    [ -f "$REPO_DIR/plugin/$FILE" ] || {
+        echo "Missing plugin/$FILE"
+        exit 1
+    }
+done
+
+for FILE in $SCRIPT_FILES; do
+    [ -f "$REPO_DIR/scripts/$FILE" ] || {
+        echo "Missing scripts/$FILE"
+        exit 1
+    }
+done
 
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "$APP_NAME update preflight: OK"
@@ -33,7 +44,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
     exit 0
 fi
 
-[ -d "$TARGET_DIR" ] || { echo "$APP_NAME is not installed."; exit 1; }
+[ -d "$TARGET_DIR" ] || {
+    echo "$APP_NAME is not installed."
+    exit 1
+}
+
 STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"
 mkdir -p "$BACKUP_DIR"
@@ -45,22 +60,34 @@ done
 rollback() {
     echo "$APP_NAME: rollback."
     "$TARGET_DIR/stop.sh" 2>/dev/null || true
-    for FILE in "$BACKUP_DIR"/*; do [ -f "$FILE" ] && cp "$FILE" "$TARGET_DIR/${FILE##*/}"; done
+    for FILE in "$BACKUP_DIR"/*; do
+        [ -f "$FILE" ] && cp "$FILE" "$TARGET_DIR/${FILE##*/}"
+    done
     chmod +x "$TARGET_DIR"/*.sh 2>/dev/null || true
     "$TARGET_DIR/start.sh" 2>/dev/null || true
 }
 
 "$TARGET_DIR/stop.sh" || true
-for FILE in $PLUGIN_FILES; do cp "$REPO_DIR/plugin/$FILE" "$TARGET_DIR/$FILE"; done
-for FILE in $SCRIPT_FILES; do cp "$REPO_DIR/scripts/$FILE" "$TARGET_DIR/$FILE"; done
+for FILE in $PLUGIN_FILES; do
+    cp "$REPO_DIR/plugin/$FILE" "$TARGET_DIR/$FILE"
+done
+for FILE in $SCRIPT_FILES; do
+    cp "$REPO_DIR/scripts/$FILE" "$TARGET_DIR/$FILE"
+done
 cp "$REPO_DIR/install.sh" "$TARGET_DIR/install.sh"
 cp "$REPO_DIR/VERSION" "$TARGET_DIR/VERSION"
 cp "$REPO_DIR/PACKAGE_MANIFEST.txt" "$TARGET_DIR/PACKAGE_MANIFEST.txt"
 chmod +x "$TARGET_DIR"/*.sh
 
-if ! "$TARGET_DIR/start.sh"; then rollback; exit 1; fi
+if ! "$TARGET_DIR/start.sh"; then
+    rollback
+    exit 1
+fi
 sleep 3
-if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then rollback; exit 1; fi
+if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then
+    rollback
+    exit 1
+fi
 
 echo "$APP_NAME updated."
 echo "Backup: $BACKUP_DIR"
