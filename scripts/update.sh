@@ -12,11 +12,8 @@ SOURCE_DIR="$(
 DRY_RUN=0
 
 case "${1:-}" in
-    "")
-        ;;
-    --dry-run|--check)
-        DRY_RUN=1
-        ;;
+    "") ;;
+    --dry-run|--check) DRY_RUN=1 ;;
     --help|-h)
         echo "Usage: ./update.sh [--dry-run]"
         exit 0
@@ -32,6 +29,9 @@ ifs_spoolman.py
 ui_v0_2.html
 ifs-spoolman-card.js
 ifs-spoolman-layout.js
+ifs-spoolman-dashboard.js
+ifs-spoolman-visibility.js
+ifs-spoolman-selection.js
 install_fluidd_card.sh
 uninstall_fluidd_card.sh
 boot_start.sh
@@ -68,7 +68,6 @@ fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"
-
 mkdir -p "$BACKUP_DIR"
 
 for FILE in $REQUIRED_FILES config.json assignments.json; do
@@ -78,14 +77,11 @@ done
 
 rollback() {
     echo "$APP_NAME: выполняется rollback."
-
     "$TARGET_DIR/stop.sh" 2>/dev/null || true
-
     for FILE in "$BACKUP_DIR"/*; do
         [ -f "$FILE" ] || continue
         cp "$FILE" "$TARGET_DIR/${FILE##*/}"
     done
-
     chmod +x "$TARGET_DIR"/*.sh 2>/dev/null || true
     "$TARGET_DIR/start.sh" 2>/dev/null || true
 }
@@ -107,10 +103,7 @@ fi
 
 sleep 3
 
-if ! wget -qO- \
-    http://127.0.0.1:7913/api/health \
-    >/dev/null 2>&1
-then
+if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then
     rollback
     exit 1
 fi
