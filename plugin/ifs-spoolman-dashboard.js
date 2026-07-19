@@ -154,7 +154,7 @@
       updateButton(button, next);
     });
 
-    actions.insertBefore(button, manageButton);
+    actions.appendChild(button);
     return button;
   }
 
