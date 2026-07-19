@@ -3,6 +3,7 @@
 
   const CARD_ID = "ifs-spoolman-fluidd-card";
   const BUTTON_ID = "ifs-spoolman-collapse-button";
+  const ACTIONS_CLASS = "ifs-spoolman-head-actions";
   const STYLE_ID = "ifs-spoolman-dashboard-style";
   const COLLAPSED_CLASS = "ifs-spoolman-is-collapsed";
   const STORAGE_KEY = "ifsSpoolmanCollapsedV1";
@@ -61,6 +62,15 @@
         border-bottom-color: transparent !important;
       }
 
+      #${CARD_ID} .${ACTIONS_CLASS} {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex: 0 0 auto;
+        margin-left: auto;
+      }
+
       #${BUTTON_ID} {
         display: inline-flex;
         align-items: center;
@@ -68,7 +78,7 @@
         flex: 0 0 auto;
         width: 32px;
         height: 32px;
-        margin-left: 4px;
+        margin: 0;
         padding: 0;
         border: 0;
         border-radius: 50%;
@@ -111,7 +121,18 @@
     const header = card.querySelector(".ifssm-head");
     if (!header) return null;
 
-    let button = card.querySelector(`#${BUTTON_ID}`);
+    const manageButton = header.querySelector(".ifssm-manage");
+    if (!manageButton) return null;
+
+    let actions = header.querySelector(`.${ACTIONS_CLASS}`);
+    if (!actions) {
+      actions = document.createElement("div");
+      actions.className = ACTIONS_CLASS;
+      header.insertBefore(actions, manageButton);
+      actions.appendChild(manageButton);
+    }
+
+    let button = actions.querySelector(`#${BUTTON_ID}`);
     if (button) return button;
 
     button = document.createElement("button");
@@ -133,13 +154,7 @@
       updateButton(button, next);
     });
 
-    const manageButton = header.querySelector(".ifssm-manage");
-    if (manageButton) {
-      header.insertBefore(button, manageButton);
-    } else {
-      header.appendChild(button);
-    }
-
+    actions.insertBefore(button, manageButton);
     return button;
   }
 
