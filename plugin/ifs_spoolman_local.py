@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase B4: local inventory provider based on native Z-Mod slot metadata."""
+"""Phase B4 repair: expose local inventory without altering provider selection."""
 
 import urllib.parse
 
@@ -9,35 +9,8 @@ import ifs_spoolman_ui as ui
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.8.0-beta"
+RUNTIME_VERSION = "0.8.0-beta-repair1"
 _BaseHandler = ui.UiRuntimeHandler
-_original_probe_spoolman = runtime._probe_spoolman
-
-runtime.VALID_PROVIDERS.add("local")
-
-
-def inventory_status():
-    configured = runtime._inventory_config["provider"]
-    connected, moonraker = _original_probe_spoolman()
-
-    if configured == "auto":
-        effective = "spoolman" if connected else "local"
-    else:
-        effective = configured
-
-    available = effective in {"none", "local"} or connected
-    return {
-        "configured_provider": configured,
-        "provider": effective,
-        "available": available,
-        "connected": connected if effective == "spoolman" else False,
-        "local_available": True,
-        "external_service_required": effective == "spoolman",
-        "fallback_active": configured == "auto" and effective != "spoolman",
-        "config_file": runtime.INVENTORY_CONFIG_FILE,
-        "moonraker": moonraker,
-        "supported_providers": ["auto", "local", "spoolman", "none"],
-    }
 
 
 def local_inventory(force=False):
@@ -71,25 +44,30 @@ def local_inventory(force=False):
     }
 
 
-runtime.inventory_status = inventory_status
-runtime.RUNTIME_VERSION = RUNTIME_VERSION
-writer.RUNTIME_VERSION = RUNTIME_VERSION
-ui.RUNTIME_VERSION = RUNTIME_VERSION
-core.APP_VERSION = RUNTIME_VERSION
-runtime._set_inventory_state(inventory_status())
-
-
 class LocalRuntimeHandler(_BaseHandler):
     def do_GET(self):
         parsed = urllib.parse.urlsplit(self.path)
         if parsed.path == "/api/inventory/local":
             query = urllib.parse.parse_qs(parsed.query)
             force = query.get("refresh", [""])[0].lower() in {"1", "true", "yes"}
-            self.send_json(200, local_inventory(force=force))
+            try:
+                self.send_json(200, local_inventory(force=force))
+            except Exception as exc:
+                core.event_log(
+                    "error",
+                    "local_inventory_read_failed",
+                    "Не удалось сформировать локальный инвентарь",
+                    error=str(exc),
+                )
+                self.send_json(500, {"error": str(exc)})
             return
         super().do_GET()
 
 
+runtime.RUNTIME_VERSION = RUNTIME_VERSION
+writer.RUNTIME_VERSION = RUNTIME_VERSION
+ui.RUNTIME_VERSION = RUNTIME_VERSION
+core.APP_VERSION = RUNTIME_VERSION
 core.Handler = LocalRuntimeHandler
 
 
