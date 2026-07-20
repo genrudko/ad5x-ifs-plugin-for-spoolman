@@ -1,14 +1,9 @@
 #!/bin/sh
 set -eu
 
-APP_NAME="AD5X IFS Plugin for Spoolman"
+APP_NAME="AD5X IFS Manager"
 TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"
-
-SOURCE_DIR="$(
-    CDPATH= cd -- "$(dirname -- "$0")"
-    pwd
-)"
-
+SOURCE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 DRY_RUN=0
 
 case "${1:-}" in
@@ -26,6 +21,7 @@ esac
 
 REQUIRED_FILES="
 ifs_spoolman.py
+ifs_spoolman_runtime.py
 ui_v0_2.html
 ifs-spoolman-card.js
 ifs-spoolman-layout.js
@@ -70,7 +66,7 @@ STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"
 mkdir -p "$BACKUP_DIR"
 
-for FILE in $REQUIRED_FILES config.json assignments.json; do
+for FILE in $REQUIRED_FILES config.json assignments.json inventory.json; do
     [ -f "$TARGET_DIR/$FILE" ] || continue
     cp "$TARGET_DIR/$FILE" "$BACKUP_DIR/$FILE"
 done
