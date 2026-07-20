@@ -28,7 +28,7 @@ download_file() {
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Manager — Phase B3 standalone manager UI ==="
+echo "=== AD5X IFS Manager — Phase B3 Fluidd manager link ==="
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
 if ! wget -qO- "$MOONRAKER_URL/server/info" >/dev/null 2>&1; then
@@ -63,6 +63,7 @@ for FILE in \
     plugin/ifs-spoolman-dashboard.js \
     plugin/ifs-spoolman-visibility.js \
     plugin/ifs-spoolman-selection.js \
+    plugin/ifs-spoolman-controls.js \
     scripts/boot_start.sh \
     scripts/start.sh \
     scripts/stop.sh \
@@ -98,6 +99,6 @@ echo "=== $RESULT_TEXT ==="
 echo "Ветка разработки: $REF"
 echo "Версия: $(cat "$TARGET_DIR/VERSION")"
 echo "Spoolman необязателен; provider=auto."
-echo "Менеджер филаментов: http://IP_ПРИНТЕРА:7913/manager"
+echo "Кнопка УПРАВЛЕНИЕ открывает: http://IP_ПРИНТЕРА:7913/manager"
 echo "Проверка состояния:"
 echo "$TARGET_DIR/status.sh"
