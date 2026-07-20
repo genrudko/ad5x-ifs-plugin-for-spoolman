@@ -1,21 +1,52 @@
 #!/usr/bin/env python3
-"""Phase B0 runtime: IFS works with optional Spoolman inventory.
+"""Phase B1 runtime: optional inventory plus read-only Z-Mod metadata discovery.
 
-The legacy backend remains intact. This wrapper adds an inventory-provider
-layer and disables Spoolman synchronization cleanly when the provider is
-`none`. Supported configured values: auto, none, spoolman.
+The legacy backend remains intact. This wrapper keeps Spoolman optional and adds
+safe, read-only discovery of native Z-Mod colour/material metadata. It does not
+execute filament movement commands and does not write Z-Mod settings.
 """
 
 import json
 import os
+import threading
+import time
 import urllib.parse
 
 import ifs_spoolman as core
 
 
-RUNTIME_VERSION = "0.7.0-beta"
+RUNTIME_VERSION = "0.7.1-beta"
 INVENTORY_CONFIG_FILE = os.path.join(core.APP_DIR, "inventory.json")
 VALID_PROVIDERS = {"auto", "none", "spoolman"}
+ZMOD_METADATA_CACHE_SECONDS = 3.0
+KNOWN_ZMOD_OBJECTS = (
+    "zmod_color",
+    "save_variables",
+    "gcode_macro COLOR",
+    "gcode_macro SET_CURRENT_PRUTOK",
+)
+KNOWN_METADATA_FILES = (
+    "/usr/prog/config/Adventurer5M.json",
+    "/root/printer_data/config/Adventurer5M.json",
+    "/usr/data/config/Adventurer5M.json",
+    "/opt/config/Adventurer5M.json",
+)
+METADATA_KEYWORDS = (
+    "color",
+    "colour",
+    "material",
+    "filament",
+    "prutok",
+    "slot",
+    "channel",
+    "type",
+)
+
+_metadata_lock = threading.RLock()
+_metadata_cache = {
+    "created_monotonic": 0.0,
+    "payload": None,
+}
 
 
 def _atomic_write(path, payload):
@@ -168,17 +199,178 @@ def synchronize(force=False, slot=None, reason="manual"):
     return False
 
 
+def _moonraker_result(path):
+    response = core.http_json(core.MOONRAKER + path)
+    result = response.get("result", {})
+    if not isinstance(result, dict):
+        raise RuntimeError("Moonraker вернул неожиданный формат ответа")
+    return result
+
+
+def _registered_objects():
+    result = _moonraker_result("/printer/objects/list")
+    objects = result.get("objects", [])
+    if not isinstance(objects, list):
+        raise RuntimeError("Moonraker не вернул список объектов Klipper")
+    return [str(item) for item in objects]
+
+
+def _query_objects(names):
+    if not names:
+        return {}
+    query = urllib.parse.urlencode({name: "" for name in names})
+    result = _moonraker_result("/printer/objects/query?" + query)
+    status = result.get("status", {})
+    return status if isinstance(status, dict) else {}
+
+
+def _interesting(value, path="", depth=0):
+    if depth > 8:
+        return None
+    if isinstance(value, dict):
+        result = {}
+        for key, child in value.items():
+            key_text = str(key)
+            child_path = f"{path}.{key_text}" if path else key_text
+            lowered = child_path.lower()
+            keep_branch = any(word in lowered for word in METADATA_KEYWORDS)
+            filtered = _interesting(child, child_path, depth + 1)
+            if filtered not in (None, {}, []):
+                result[key_text] = filtered
+            elif keep_branch and child is not None and not isinstance(child, (dict, list)):
+                result[key_text] = child
+        return result or None
+    if isinstance(value, list):
+        result = []
+        for index, child in enumerate(value):
+            filtered = _interesting(child, f"{path}[{index}]", depth + 1)
+            if filtered not in (None, {}, []):
+                result.append(filtered)
+        return result or None
+    if any(word in path.lower() for word in METADATA_KEYWORDS):
+        return value
+    return None
+
+
+def _read_metadata_files():
+    sources = []
+    for path in KNOWN_METADATA_FILES:
+        if not os.path.isfile(path):
+            continue
+        entry = {"path": path, "readable": True}
+        try:
+            with open(path, "r", encoding="utf-8") as stream:
+                raw = json.load(stream)
+            entry["candidates"] = _interesting(raw) or {}
+        except Exception as exc:
+            entry["readable"] = False
+            entry["error"] = str(exc)
+        sources.append(entry)
+    return sources
+
+
+def _slot_candidates(payload):
+    slots = {str(index): {} for index in range(1, int(core.SLOT_COUNT) + 1)}
+
+    def walk(value, path=""):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                walk(child, f"{path}.{key}" if path else str(key))
+            return
+        if isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, f"{path}[{index}]")
+            return
+
+        lowered = path.lower()
+        if not any(word in lowered for word in ("color", "colour", "material", "filament", "prutok")):
+            return
+        for slot in slots:
+            markers = (
+                f"slot{slot}", f"slot_{slot}", f"slot.{slot}",
+                f"channel{slot}", f"channel_{slot}", f"channel.{slot}",
+                f"prutok{slot}", f"prutok_{slot}", f"prutok.{slot}",
+                f"[{int(slot) - 1}]",
+            )
+            if any(marker in lowered for marker in markers):
+                slots[slot][path] = value
+
+    walk(payload)
+    return slots
+
+
+def zmod_filament_metadata(force=False):
+    now = time.monotonic()
+    with _metadata_lock:
+        cached = _metadata_cache["payload"]
+        age = now - _metadata_cache["created_monotonic"]
+        if not force and cached is not None and age < ZMOD_METADATA_CACHE_SECONDS:
+            return dict(cached)
+
+        checked_at = core.timestamp_now()
+        try:
+            objects = _registered_objects()
+            selected = [name for name in KNOWN_ZMOD_OBJECTS if name in objects]
+            object_status = _query_objects(selected)
+            interesting_objects = _interesting(object_status) or {}
+            file_sources = _read_metadata_files()
+            combined = {
+                "objects": interesting_objects,
+                "files": file_sources,
+            }
+            payload = {
+                "available": bool(interesting_objects or file_sources),
+                "read_only": True,
+                "write_actions_enabled": False,
+                "checked_at": checked_at,
+                "cache_ttl_seconds": ZMOD_METADATA_CACHE_SECONDS,
+                "registered_candidates": selected,
+                "registered_zmod_objects": [
+                    name for name in objects if "zmod" in name.lower()
+                ],
+                "sources": combined,
+                "slots": _slot_candidates(combined),
+                "active_slot": core.state_snapshot().get("active_slot"),
+                "reason": None if (interesting_objects or file_sources) else "metadata_source_not_found",
+            }
+        except Exception as exc:
+            payload = {
+                "available": False,
+                "read_only": True,
+                "write_actions_enabled": False,
+                "checked_at": checked_at,
+                "cache_ttl_seconds": ZMOD_METADATA_CACHE_SECONDS,
+                "registered_candidates": [],
+                "registered_zmod_objects": [],
+                "sources": {"objects": {}, "files": []},
+                "slots": {str(index): {} for index in range(1, int(core.SLOT_COUNT) + 1)},
+                "active_slot": core.state_snapshot().get("active_slot"),
+                "reason": "metadata_probe_failed",
+                "error": str(exc),
+            }
+
+        _metadata_cache["created_monotonic"] = time.monotonic()
+        _metadata_cache["payload"] = dict(payload)
+        return payload
+
+
 def public_config():
     payload = _original_public_config()
     payload["application"] = "AD5X IFS Manager"
     payload["application_version"] = RUNTIME_VERSION
     payload["inventory"] = inventory_status()
+    payload["zmod_metadata"] = {
+        "endpoint": "/api/zmod/filaments",
+        "read_only": True,
+        "write_actions_enabled": False,
+    }
     return payload
 
 
 def build_health():
     health = _original_build_health()
     status = inventory_status()
+    metadata = zmod_filament_metadata()
     _set_inventory_state(status)
 
     health["application"] = "AD5X IFS Manager"
@@ -189,6 +381,13 @@ def build_health():
         "configured_provider": status["configured_provider"],
         "connected": status["connected"],
         "fallback_active": status["fallback_active"],
+    }
+    health["components"]["zmod_metadata"] = {
+        "ok": metadata["available"],
+        "read_only": True,
+        "registered_candidates": metadata.get("registered_candidates", []),
+        "source_file_count": len(metadata.get("sources", {}).get("files", [])),
+        "reason": metadata.get("reason"),
     }
 
     sensor_ok = health["components"].get("ifs_sensor", {}).get("ok") is True
@@ -203,9 +402,15 @@ def build_health():
 
 class RuntimeHandler(_BaseHandler):
     def do_GET(self):
-        path = urllib.parse.urlsplit(self.path).path
+        parsed = urllib.parse.urlsplit(self.path)
+        path = parsed.path
+        query = urllib.parse.parse_qs(parsed.query)
         if path == "/api/inventory/status":
             self.send_json(200, inventory_status())
+            return
+        if path == "/api/zmod/filaments":
+            force = query.get("refresh", [""])[0].lower() in {"1", "true", "yes"}
+            self.send_json(200, zmod_filament_metadata(force=force))
             return
         super().do_GET()
 
