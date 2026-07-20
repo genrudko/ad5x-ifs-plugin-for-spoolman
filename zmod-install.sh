@@ -28,7 +28,7 @@ download_file() {
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Manager — Phase B2 safe Z-Mod metadata editing ==="
+echo "=== AD5X IFS Manager — Phase B3 standalone manager UI ==="
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
 if ! wget -qO- "$MOONRAKER_URL/server/info" >/dev/null 2>&1; then
@@ -55,6 +55,8 @@ for FILE in \
     plugin/ifs_spoolman.py \
     plugin/ifs_spoolman_runtime.py \
     plugin/ifs_spoolman_writer.py \
+    plugin/ifs_spoolman_ui.py \
+    plugin/zmod-filaments.html \
     plugin/ui_v0_2.html \
     plugin/ifs-spoolman-card.js \
     plugin/ifs-spoolman-layout.js \
@@ -96,7 +98,6 @@ echo "=== $RESULT_TEXT ==="
 echo "Ветка разработки: $REF"
 echo "Версия: $(cat "$TARGET_DIR/VERSION")"
 echo "Spoolman необязателен; provider=auto."
-echo "Метаданные Z-Mod: http://IP_ПРИНТЕРА:7913/api/zmod/filaments?refresh=1"
-echo "Запись слота: POST http://IP_ПРИНТЕРА:7913/api/zmod/filaments/slot"
+echo "Менеджер филаментов: http://IP_ПРИНТЕРА:7913/manager"
 echo "Проверка состояния:"
 echo "$TARGET_DIR/status.sh"
