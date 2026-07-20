@@ -1,10 +1,11 @@
 # AD5X IFS Manager
-# Runtime/package manifest for 0.7.11-beta
+# Runtime/package manifest for 0.8.0-beta
 
 ifs_spoolman.py
 ifs_spoolman_runtime.py
 ifs_spoolman_writer.py
 ifs_spoolman_ui.py
+ifs_spoolman_local.py
 zmod-filaments.html
 zmod-filaments-live.js
 ui_v0_2.html
