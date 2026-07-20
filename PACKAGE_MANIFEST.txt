@@ -1,7 +1,8 @@
-# AD5X IFS Plugin for Spoolman
-# Runtime/package manifest for 0.6.2-dashboard-test1
+# AD5X IFS Manager
+# Runtime/package manifest for 0.7.0-beta
 
 ifs_spoolman.py
+ifs_spoolman_runtime.py
 ui_v0_2.html
 ifs-spoolman-card.js
 ifs-spoolman-layout.js
