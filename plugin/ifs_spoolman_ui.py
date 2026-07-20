@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase B3: standalone web UI with physical IFS slot presence."""
+"""Standalone web UI with resilient physical IFS slot presence polling."""
 
 import json
 import os
@@ -12,19 +12,26 @@ import ifs_spoolman as core
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.7.9-beta"
+RUNTIME_VERSION = "0.7.10-beta"
 MANAGER_HTML = os.path.join(core.APP_DIR, "zmod-filaments.html")
 IFS_STATUS_CACHE_SECONDS = 1.0
-IFS_STATUS_GCODE_COUNT = 100
+IFS_STATUS_GCODE_COUNT = 1000
+IFS_STATUS_POLL_ATTEMPTS = 10
+IFS_STATUS_POLL_INTERVAL = 0.3
+IFS_STATUS_HTTP_TIMEOUT = max(float(core.HTTP_TIMEOUT), 15.0)
 _BaseHandler = writer.WriteRuntimeHandler
 _original_public_config = writer.public_config
 _original_build_health = writer.build_health
 _ifs_lock = threading.RLock()
 _ifs_cache = {"created_monotonic": 0.0, "payload": None}
+_ifs_last_success = {"payload": None}
 
 
-def _moonraker_result(path):
-    response = core.http_json(core.MOONRAKER + path)
+def _moonraker_result(path, timeout=None):
+    response = core.http_json(
+        core.MOONRAKER + path,
+        timeout=timeout or IFS_STATUS_HTTP_TIMEOUT,
+    )
     result = response.get("result", {})
     if not isinstance(result, dict):
         raise RuntimeError("Moonraker вернул неожиданный формат ответа")
@@ -39,7 +46,7 @@ def _run_gcode(script):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=core.HTTP_TIMEOUT) as response:
+    with urllib.request.urlopen(request, timeout=IFS_STATUS_HTTP_TIMEOUT) as response:
         payload = json.load(response)
     if payload.get("result") != "ok":
         raise RuntimeError("Moonraker не подтвердил выполнение IFS_STATUS")
@@ -53,7 +60,7 @@ def _extract_ifs_values(entries, started_at):
             entry_time = float(entry.get("time", 0.0))
         except (TypeError, ValueError):
             entry_time = 0.0
-        if entry_time + 0.05 < started_at:
+        if entry_time + 0.1 < started_at:
             continue
         message = str(entry.get("message", "")).strip()
         if message.startswith("//"):
@@ -66,7 +73,43 @@ def _extract_ifs_values(entries, started_at):
             continue
         if isinstance(values, dict) and {"State", "Ports", "Silk", "Chan"}.issubset(values):
             return values
-    raise RuntimeError("Ответ IFS_STATUS не найден в журнале G-code")
+    return None
+
+
+def _wait_for_ifs_values(started_at):
+    last_error = None
+    for attempt in range(IFS_STATUS_POLL_ATTEMPTS):
+        try:
+            result = _moonraker_result(
+                "/server/gcode_store?count=" + str(IFS_STATUS_GCODE_COUNT)
+            )
+            entries = result.get("gcode_store", [])
+            if not isinstance(entries, list):
+                raise RuntimeError("Moonraker не вернул журнал G-code")
+            values = _extract_ifs_values(entries, started_at)
+            if values is not None:
+                return values
+        except Exception as exc:
+            last_error = exc
+        if attempt + 1 < IFS_STATUS_POLL_ATTEMPTS:
+            time.sleep(IFS_STATUS_POLL_INTERVAL)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Ответ IFS_STATUS не появился в журнале G-code")
+
+
+def _slots_from_values(values):
+    ports = values.get("Ports", [])
+    if not isinstance(ports, list):
+        raise RuntimeError("IFS_STATUS вернул некорректное поле Ports")
+    slots = {}
+    for slot in range(1, int(core.SLOT_COUNT) + 1):
+        present = bool(ports[slot - 1]) if slot - 1 < len(ports) else False
+        slots[str(slot)] = {
+            "slot": slot,
+            "filament_present": present,
+        }
+    return slots
 
 
 def ifs_slot_status(force=False):
@@ -80,45 +123,46 @@ def ifs_slot_status(force=False):
         try:
             started_at = time.time()
             _run_gcode("IFS_STATUS")
-            result = _moonraker_result(
-                "/server/gcode_store?count=" + str(IFS_STATUS_GCODE_COUNT)
-            )
-            entries = result.get("gcode_store", [])
-            if not isinstance(entries, list):
-                raise RuntimeError("Moonraker не вернул журнал G-code")
-            values = _extract_ifs_values(entries, started_at)
-            ports = values.get("Ports", [])
-            if not isinstance(ports, list):
-                ports = []
-            slots = {}
-            for slot in range(1, int(core.SLOT_COUNT) + 1):
-                present = bool(ports[slot - 1]) if slot - 1 < len(ports) else False
-                slots[str(slot)] = {
-                    "slot": slot,
-                    "filament_present": present,
-                }
+            values = _wait_for_ifs_values(started_at)
             payload = {
                 "available": True,
+                "stale": False,
                 "checked_at": core.timestamp_now(),
                 "source": "IFS_STATUS.Ports",
-                "slots": slots,
+                "slots": _slots_from_values(values),
                 "active_slot": core.state_snapshot().get("active_slot"),
                 "raw": values,
                 "reason": None,
             }
+            _ifs_last_success["payload"] = dict(payload)
         except Exception as exc:
-            payload = {
-                "available": False,
-                "checked_at": core.timestamp_now(),
-                "source": "IFS_STATUS.Ports",
-                "slots": {
-                    str(slot): {"slot": slot, "filament_present": None}
-                    for slot in range(1, int(core.SLOT_COUNT) + 1)
-                },
-                "active_slot": core.state_snapshot().get("active_slot"),
-                "reason": "ifs_status_probe_failed",
-                "error": str(exc),
-            }
+            previous = _ifs_last_success.get("payload")
+            if previous is not None:
+                payload = dict(previous)
+                payload.update(
+                    {
+                        "available": False,
+                        "stale": True,
+                        "checked_at": core.timestamp_now(),
+                        "reason": "ifs_status_probe_failed",
+                        "error": str(exc),
+                        "last_success_at": previous.get("checked_at"),
+                    }
+                )
+            else:
+                payload = {
+                    "available": False,
+                    "stale": False,
+                    "checked_at": core.timestamp_now(),
+                    "source": "IFS_STATUS.Ports",
+                    "slots": {
+                        str(slot): {"slot": slot, "filament_present": None}
+                        for slot in range(1, int(core.SLOT_COUNT) + 1)
+                    },
+                    "active_slot": core.state_snapshot().get("active_slot"),
+                    "reason": "ifs_status_probe_failed",
+                    "error": str(exc),
+                }
 
         _ifs_cache["created_monotonic"] = time.monotonic()
         _ifs_cache["payload"] = dict(payload)
@@ -142,6 +186,7 @@ def build_health():
     ] = "/manager"
     health["components"]["ifs_slots"] = {
         "ok": presence.get("available") is True,
+        "stale": presence.get("stale") is True,
         "source": presence.get("source"),
         "reason": presence.get("reason"),
     }
