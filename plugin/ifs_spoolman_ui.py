@@ -12,7 +12,7 @@ import ifs_spoolman as core
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.7.7-beta"
+RUNTIME_VERSION = "0.7.8-beta"
 MANAGER_HTML = os.path.join(core.APP_DIR, "zmod-filaments.html")
 IFS_STATUS_CACHE_SECONDS = 1.0
 IFS_STATUS_GCODE_COUNT = 100
