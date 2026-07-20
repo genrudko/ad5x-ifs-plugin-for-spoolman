@@ -11,44 +11,31 @@ SOURCE_DIR="$WORK_DIR/source"
 TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"
 MOONRAKER_URL="http://127.0.0.1:7125"
 
-fail() {
-    echo "ОШИБКА: $*" >&2
-    exit 1
-}
-
-cleanup() {
-    rm -rf "$WORK_DIR"
-}
-
+fail() { echo "ОШИБКА: $*" >&2; exit 1; }
+cleanup() { rm -rf "$WORK_DIR"; }
 trap cleanup EXIT HUP INT TERM
 
 download_file() {
     REMOTE_PATH="$1"
     LOCAL_PATH="$SOURCE_DIR/$REMOTE_PATH"
     LOCAL_DIR="${LOCAL_PATH%/*}"
-
     mkdir -p "$LOCAL_DIR"
     echo "  $REMOTE_PATH"
-
     wget -qO "$LOCAL_PATH" "$RAW_BASE/$REMOTE_PATH?cb=$CACHE_BUSTER" || {
         rm -f "$LOCAL_PATH"
         fail "не удалось загрузить $REMOTE_PATH"
     }
-
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Manager — Phase B1 normalized Z-Mod metadata ==="
-
+echo "=== AD5X IFS Manager — Phase B2 safe Z-Mod metadata editing ==="
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
-
 if ! wget -qO- "$MOONRAKER_URL/server/info" >/dev/null 2>&1; then
     fail "Moonraker недоступен по $MOONRAKER_URL. Проверьте установку и запуск Z-Mod"
 fi
 
 echo "Moonraker: доступен"
-
 SPOOLMAN_STATUS="$(wget -qO- "$MOONRAKER_URL/server/spoolman/status" 2>/dev/null || true)"
 if printf '%s' "$SPOOLMAN_STATUS" | grep -Eq '"spoolman_connected"[[:space:]]*:[[:space:]]*true'; then
     echo "Spoolman: подключён; режим auto выберет провайдер spoolman"
@@ -58,7 +45,6 @@ fi
 
 rm -rf "$WORK_DIR"
 mkdir -p "$SOURCE_DIR"
-
 echo "Загрузка файлов ветки $REF..."
 
 for FILE in \
@@ -68,6 +54,7 @@ for FILE in \
     PACKAGE_MANIFEST.txt \
     plugin/ifs_spoolman.py \
     plugin/ifs_spoolman_runtime.py \
+    plugin/ifs_spoolman_writer.py \
     plugin/ui_v0_2.html \
     plugin/ifs-spoolman-card.js \
     plugin/ifs-spoolman-layout.js \
@@ -91,7 +78,6 @@ do
 done
 
 chmod +x "$SOURCE_DIR/install.sh" "$SOURCE_DIR/update.sh" "$SOURCE_DIR"/scripts/*.sh
-
 cd "$SOURCE_DIR"
 
 if [ -d "$TARGET_DIR" ] && [ -f "$TARGET_DIR/ifs_spoolman.py" ]; then
@@ -110,6 +96,7 @@ echo "=== $RESULT_TEXT ==="
 echo "Ветка разработки: $REF"
 echo "Версия: $(cat "$TARGET_DIR/VERSION")"
 echo "Spoolman необязателен; provider=auto."
-echo "Нормализованные данные Z-Mod: http://IP_ПРИНТЕРА:7913/api/zmod/filaments?refresh=1"
+echo "Метаданные Z-Mod: http://IP_ПРИНТЕРА:7913/api/zmod/filaments?refresh=1"
+echo "Запись слота: POST http://IP_ПРИНТЕРА:7913/api/zmod/filaments/slot"
 echo "Проверка состояния:"
 echo "$TARGET_DIR/status.sh"
