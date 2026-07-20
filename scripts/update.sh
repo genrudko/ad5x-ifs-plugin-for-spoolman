@@ -19,6 +19,7 @@ ifs_spoolman_runtime.py
 ifs_spoolman_writer.py
 ifs_spoolman_ui.py
 zmod-filaments.html
+zmod-filaments-live.js
 ui_v0_2.html
 ifs-spoolman-card.js
 ifs-spoolman-layout.js
@@ -76,6 +77,7 @@ if ! "$TARGET_DIR/start.sh"; then rollback; exit 1; fi
 sleep 3
 if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then rollback; exit 1; fi
 if ! wget -qO- http://127.0.0.1:7913/manager >/dev/null 2>&1; then rollback; exit 1; fi
+if ! wget -qO- http://127.0.0.1:7913/zmod-filaments-live.js >/dev/null 2>&1; then rollback; exit 1; fi
 
 echo "$APP_NAME обновлён."
 echo "Backup: $BACKUP_DIR"
