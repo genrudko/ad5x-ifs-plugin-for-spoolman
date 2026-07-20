@@ -3,7 +3,7 @@ set -eu
 
 REPO_OWNER="genrudko"
 REPO_NAME="ad5x-ifs-plugin-for-spoolman"
-REF="main"
+REF="feature/filament-manager-clean"
 RAW_BASE="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/$REF"
 CACHE_BUSTER="$(date +%s 2>/dev/null || echo "$$")"
 WORK_DIR="/usr/data/ad5x-ifs-plugin-installer"
@@ -38,7 +38,7 @@ download_file() {
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Plugin for Spoolman — установка/обновление для Z-Mod ==="
+echo "=== AD5X IFS Manager — Phase B0 optional inventory ==="
 
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
@@ -47,24 +47,19 @@ if ! wget -qO- "$MOONRAKER_URL/server/info" >/dev/null 2>&1; then
     fail "Moonraker недоступен по $MOONRAKER_URL. Проверьте установку и запуск Z-Mod"
 fi
 
-SPOOLMAN_STATUS="$(wget -qO- "$MOONRAKER_URL/server/spoolman/status" 2>/dev/null || true)"
-
-if ! printf '%s' "$SPOOLMAN_STATUS" | grep -Eq '"spoolman_connected"[[:space:]]*:[[:space:]]*true'; then
-    cat >&2 <<'EOF'
-ОШИБКА: Moonraker не подключён к Spoolman.
-
-Плагин не заменяет Spoolman и не устанавливает его автоматически.
-EOF
-    exit 1
-fi
-
 echo "Moonraker: доступен"
-echo "Spoolman: подключён"
+
+SPOOLMAN_STATUS="$(wget -qO- "$MOONRAKER_URL/server/spoolman/status" 2>/dev/null || true)"
+if printf '%s' "$SPOOLMAN_STATUS" | grep -Eq '"spoolman_connected"[[:space:]]*:[[:space:]]*true'; then
+    echo "Spoolman: подключён; режим auto выберет провайдер spoolman"
+else
+    echo "Spoolman: не подключён; режим auto выберет провайдер none"
+fi
 
 rm -rf "$WORK_DIR"
 mkdir -p "$SOURCE_DIR"
 
-echo "Загрузка файлов репозитория через raw.githubusercontent.com..."
+echo "Загрузка файлов ветки $REF..."
 
 for FILE in \
     install.sh \
@@ -72,6 +67,7 @@ for FILE in \
     VERSION \
     PACKAGE_MANIFEST.txt \
     plugin/ifs_spoolman.py \
+    plugin/ifs_spoolman_runtime.py \
     plugin/ui_v0_2.html \
     plugin/ifs-spoolman-card.js \
     plugin/ifs-spoolman-layout.js \
@@ -87,7 +83,8 @@ for FILE in \
     scripts/install_fluidd_card.sh \
     scripts/uninstall_fluidd_card.sh \
     examples/config.example.json \
-    examples/assignments.example.json
+    examples/assignments.example.json \
+    examples/inventory.example.json
 
 do
     download_file "$FILE"
@@ -110,7 +107,8 @@ fi
 
 echo
 echo "=== $RESULT_TEXT ==="
-echo "Карточка показывается только на Dashboard и поддерживает сворачивание."
-echo "Откройте: http://IP_ПРИНТЕРА:7913/"
+echo "Ветка разработки: $REF"
+echo "Spoolman теперь необязателен; provider=auto."
+echo "Статус провайдера: http://IP_ПРИНТЕРА:7913/api/inventory/status"
 echo "Проверка состояния:"
 echo "$TARGET_DIR/status.sh"
