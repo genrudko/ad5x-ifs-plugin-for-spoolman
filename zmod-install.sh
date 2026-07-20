@@ -28,7 +28,7 @@ download_file() {
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Manager — Phase B3 live manager state ==="
+echo "=== AD5X IFS Manager — Phase B4 local inventory provider ==="
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
 if ! wget -qO- "$MOONRAKER_URL/server/info" >/dev/null 2>&1; then
@@ -40,7 +40,7 @@ SPOOLMAN_STATUS="$(wget -qO- "$MOONRAKER_URL/server/spoolman/status" 2>/dev/null
 if printf '%s' "$SPOOLMAN_STATUS" | grep -Eq '"spoolman_connected"[[:space:]]*:[[:space:]]*true'; then
     echo "Spoolman: подключён; режим auto выберет провайдер spoolman"
 else
-    echo "Spoolman: не подключён; режим auto выберет провайдер none"
+    echo "Spoolman: не подключён; режим auto выберет локальный провайдер Z-Mod"
 fi
 
 rm -rf "$WORK_DIR"
@@ -56,6 +56,7 @@ for FILE in \
     plugin/ifs_spoolman_runtime.py \
     plugin/ifs_spoolman_writer.py \
     plugin/ifs_spoolman_ui.py \
+    plugin/ifs_spoolman_local.py \
     plugin/zmod-filaments.html \
     plugin/zmod-filaments-live.js \
     plugin/ui_v0_2.html \
@@ -99,7 +100,6 @@ echo
 echo "=== $RESULT_TEXT ==="
 echo "Ветка разработки: $REF"
 echo "Версия: $(cat "$TARGET_DIR/VERSION")"
-echo "Spoolman необязателен; provider=auto."
-echo "Менеджер автоматически обновляет состояние: http://IP_ПРИНТЕРА:7913/manager"
-echo "Проверка состояния:"
-echo "$TARGET_DIR/status.sh"
+echo "Провайдеры учёта: auto, local, spoolman, none."
+echo "Локальный инвентарь: http://IP_ПРИНТЕРА:7913/api/inventory/local"
+echo "Менеджер: http://IP_ПРИНТЕРА:7913/manager"
