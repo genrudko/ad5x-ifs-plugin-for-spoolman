@@ -9,19 +9,16 @@ DRY_RUN=0
 case "${1:-}" in
     "") ;;
     --dry-run|--check) DRY_RUN=1 ;;
-    --help|-h)
-        echo "Usage: ./update.sh [--dry-run]"
-        exit 0
-        ;;
-    *)
-        echo "Unknown argument: $1"
-        exit 2
-        ;;
+    --help|-h) echo "Usage: ./update.sh [--dry-run]"; exit 0 ;;
+    *) echo "Unknown argument: $1"; exit 2 ;;
 esac
 
 REQUIRED_FILES="
 ifs_spoolman.py
 ifs_spoolman_runtime.py
+ifs_spoolman_writer.py
+ifs_spoolman_ui.py
+zmod-filaments.html
 ui_v0_2.html
 ifs-spoolman-card.js
 ifs-spoolman-layout.js
@@ -42,10 +39,7 @@ PACKAGE_MANIFEST.txt
 "
 
 for FILE in $REQUIRED_FILES; do
-    if [ ! -f "$SOURCE_DIR/$FILE" ]; then
-        echo "$APP_NAME: отсутствует исходный файл: $FILE"
-        exit 1
-    fi
+    [ -f "$SOURCE_DIR/$FILE" ] || { echo "$APP_NAME: отсутствует исходный файл: $FILE"; exit 1; }
 done
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -56,54 +50,33 @@ if [ "$DRY_RUN" -eq 1 ]; then
     exit 0
 fi
 
-if [ ! -d "$TARGET_DIR" ]; then
-    echo "$APP_NAME не установлен."
-    echo "Используй install.sh."
-    exit 1
-fi
-
+[ -d "$TARGET_DIR" ] || { echo "$APP_NAME не установлен."; exit 1; }
 STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"
 mkdir -p "$BACKUP_DIR"
-
 for FILE in $REQUIRED_FILES config.json assignments.json inventory.json; do
-    [ -f "$TARGET_DIR/$FILE" ] || continue
-    cp "$TARGET_DIR/$FILE" "$BACKUP_DIR/$FILE"
+    [ -f "$TARGET_DIR/$FILE" ] && cp "$TARGET_DIR/$FILE" "$BACKUP_DIR/$FILE"
 done
 
 rollback() {
     echo "$APP_NAME: выполняется rollback."
     "$TARGET_DIR/stop.sh" 2>/dev/null || true
-    for FILE in "$BACKUP_DIR"/*; do
-        [ -f "$FILE" ] || continue
-        cp "$FILE" "$TARGET_DIR/${FILE##*/}"
-    done
+    for FILE in "$BACKUP_DIR"/*; do [ -f "$FILE" ] && cp "$FILE" "$TARGET_DIR/${FILE##*/}"; done
     chmod +x "$TARGET_DIR"/*.sh 2>/dev/null || true
     "$TARGET_DIR/start.sh" 2>/dev/null || true
 }
 
 "$TARGET_DIR/stop.sh" || true
-
 if [ "$SOURCE_DIR" != "$TARGET_DIR" ]; then
-    for FILE in $REQUIRED_FILES; do
-        cp "$SOURCE_DIR/$FILE" "$TARGET_DIR/$FILE"
-    done
+    for FILE in $REQUIRED_FILES; do cp "$SOURCE_DIR/$FILE" "$TARGET_DIR/$FILE"; done
 fi
-
 chmod +x "$TARGET_DIR"/*.sh
-
-if ! "$TARGET_DIR/start.sh"; then
-    rollback
-    exit 1
-fi
-
+if ! "$TARGET_DIR/start.sh"; then rollback; exit 1; fi
 sleep 3
-
-if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then
-    rollback
-    exit 1
-fi
+if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then rollback; exit 1; fi
+if ! wget -qO- http://127.0.0.1:7913/manager >/dev/null 2>&1; then rollback; exit 1; fi
 
 echo "$APP_NAME обновлён."
 echo "Backup: $BACKUP_DIR"
 echo "Version: $(cat "$TARGET_DIR/VERSION")"
+echo "Manager: http://PRINTER_IP:7913/manager"
