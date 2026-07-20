@@ -9,36 +9,21 @@ NO_START=0
 case "${1:-}" in
     "") ;;
     --no-start) NO_START=1 ;;
-    --help|-h)
-        echo "Usage: ./install.sh [--no-start]"
-        exit 0
-        ;;
-    *)
-        echo "Unknown argument: $1"
-        exit 2
-        ;;
+    --help|-h) echo "Usage: ./install.sh [--no-start]"; exit 0 ;;
+    *) echo "Unknown argument: $1"; exit 2 ;;
 esac
 
-PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
+PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ifs_spoolman_writer.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
 SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh"
 
 for FILE in $PLUGIN_FILES; do
-    [ -f "$REPO_DIR/plugin/$FILE" ] || {
-        echo "$APP_NAME: missing plugin/$FILE"
-        exit 1
-    }
+    [ -f "$REPO_DIR/plugin/$FILE" ] || { echo "$APP_NAME: missing plugin/$FILE"; exit 1; }
 done
 for FILE in $SCRIPT_FILES; do
-    [ -f "$REPO_DIR/scripts/$FILE" ] || {
-        echo "$APP_NAME: missing scripts/$FILE"
-        exit 1
-    }
+    [ -f "$REPO_DIR/scripts/$FILE" ] || { echo "$APP_NAME: missing scripts/$FILE"; exit 1; }
 done
 for FILE in VERSION PACKAGE_MANIFEST.txt; do
-    [ -f "$REPO_DIR/$FILE" ] || {
-        echo "$APP_NAME: missing $FILE"
-        exit 1
-    }
+    [ -f "$REPO_DIR/$FILE" ] || { echo "$APP_NAME: missing $FILE"; exit 1; }
 done
 
 mkdir -p "$TARGET_DIR"
@@ -55,10 +40,7 @@ for FILE in config assignments inventory; do
 done
 
 chmod +x "$TARGET_DIR"/*.sh
-
-if [ "$NO_START" -eq 0 ]; then
-    "$TARGET_DIR/start.sh"
-fi
+[ "$NO_START" -eq 1 ] || "$TARGET_DIR/start.sh"
 
 echo "$APP_NAME installed."
 echo "Path: $TARGET_DIR"
