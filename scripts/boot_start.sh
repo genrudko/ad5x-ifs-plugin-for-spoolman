@@ -6,7 +6,7 @@ APP_DIR="/opt/config/mod_data/ifs_spoolman"
 PID_FILE="$APP_DIR/ifs_spoolman.pid"
 LOG_FILE="$APP_DIR/ifs_spoolman.log"
 PYTHON="/root/moonraker-env/bin/python3"
-PROGRAM="$APP_DIR/ifs_spoolman_writer.py"
+PROGRAM="$APP_DIR/ifs_spoolman_ui.py"
 
 if [ -x "$APP_DIR/install_fluidd_card.sh" ]; then
     "$APP_DIR/install_fluidd_card.sh" \
@@ -33,6 +33,7 @@ fi
 
 [ -x "$PYTHON" ] || { echo "$APP_NAME: не найден Python: $PYTHON"; exit 1; }
 [ -f "$PROGRAM" ] || { echo "$APP_NAME: не найден runtime: $PROGRAM"; exit 1; }
+[ -f "$APP_DIR/zmod-filaments.html" ] || { echo "$APP_NAME: не найдена страница менеджера"; exit 1; }
 
 nohup "$PYTHON" "$PROGRAM" >>"$LOG_FILE" 2>&1 &
 NEW_PID=$!
