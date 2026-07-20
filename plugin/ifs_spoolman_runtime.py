@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Phase B1 runtime: optional inventory plus read-only Z-Mod metadata discovery.
+"""Phase B1 runtime: optional inventory plus normalized Z-Mod metadata.
 
 The legacy backend remains intact. This wrapper keeps Spoolman optional and adds
-safe, read-only discovery of native Z-Mod colour/material metadata. It does not
-execute filament movement commands and does not write Z-Mod settings.
+safe, read-only access to native Z-Mod colour/material metadata stored in the
+FFMInfo section of Adventurer5M.json. It does not execute filament movement
+commands and does not write Z-Mod settings.
 """
 
 import json
@@ -15,7 +16,7 @@ import urllib.parse
 import ifs_spoolman as core
 
 
-RUNTIME_VERSION = "0.7.1-beta"
+RUNTIME_VERSION = "0.7.2-beta"
 INVENTORY_CONFIG_FILE = os.path.join(core.APP_DIR, "inventory.json")
 VALID_PROVIDERS = {"auto", "none", "spoolman"}
 ZMOD_METADATA_CACHE_SECONDS = 3.0
@@ -252,50 +253,115 @@ def _interesting(value, path="", depth=0):
     return None
 
 
+def _normalize_color(value):
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if not text.startswith("#"):
+        text = "#" + text
+    hexadecimal = text[1:]
+    if len(hexadecimal) not in (6, 8):
+        return None
+    if any(character not in "0123456789abcdefABCDEF" for character in hexadecimal):
+        return None
+    return "#" + hexadecimal.upper()
+
+
+def _normalize_material(value):
+    text = str(value or "").strip()
+    if not text or text == "?":
+        return None
+    return text
+
+
+def _normalize_channel(value):
+    try:
+        channel = int(value)
+    except (TypeError, ValueError):
+        return None
+    return channel if 1 <= channel <= int(core.SLOT_COUNT) else None
+
+
+def _ffm_signature(ffm_info):
+    return json.dumps(
+        ffm_info,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def _read_metadata_files():
     sources = []
+    signature_owner = {}
+
     for path in KNOWN_METADATA_FILES:
         if not os.path.isfile(path):
             continue
-        entry = {"path": path, "readable": True}
+
+        entry = {
+            "path": path,
+            "realpath": os.path.realpath(path),
+            "readable": True,
+            "section": "FFMInfo",
+            "mirror_of": None,
+        }
+
         try:
+            stat_result = os.stat(path)
+            entry["device"] = stat_result.st_dev
+            entry["inode"] = stat_result.st_ino
+
             with open(path, "r", encoding="utf-8") as stream:
                 raw = json.load(stream)
+
+            ffm_info = raw.get("FFMInfo", {}) if isinstance(raw, dict) else {}
+            if not isinstance(ffm_info, dict):
+                ffm_info = {}
+
+            entry["ffm_info"] = ffm_info
             entry["candidates"] = _interesting(raw) or {}
+            entry["valid"] = bool(ffm_info)
+
+            signature = _ffm_signature(ffm_info)
+            if signature in signature_owner:
+                entry["mirror_of"] = signature_owner[signature]
+            else:
+                signature_owner[signature] = path
         except Exception as exc:
             entry["readable"] = False
+            entry["valid"] = False
             entry["error"] = str(exc)
+
         sources.append(entry)
+
     return sources
 
 
-def _slot_candidates(payload):
-    slots = {str(index): {} for index in range(1, int(core.SLOT_COUNT) + 1)}
+def _select_primary_source(file_sources):
+    for entry in file_sources:
+        if entry.get("readable") and entry.get("valid") and not entry.get("mirror_of"):
+            return entry
+    for entry in file_sources:
+        if entry.get("readable") and entry.get("valid"):
+            return entry
+    return None
 
-    def walk(value, path=""):
-        if isinstance(value, dict):
-            for key, child in value.items():
-                walk(child, f"{path}.{key}" if path else str(key))
-            return
-        if isinstance(value, list):
-            for index, child in enumerate(value):
-                walk(child, f"{path}[{index}]")
-            return
 
-        lowered = path.lower()
-        if not any(word in lowered for word in ("color", "colour", "material", "filament", "prutok")):
-            return
-        for slot in slots:
-            markers = (
-                f"slot{slot}", f"slot_{slot}", f"slot.{slot}",
-                f"channel{slot}", f"channel_{slot}", f"channel.{slot}",
-                f"prutok{slot}", f"prutok_{slot}", f"prutok.{slot}",
-                f"[{int(slot) - 1}]",
-            )
-            if any(marker in lowered for marker in markers):
-                slots[slot][path] = value
-
-    walk(payload)
+def _normalized_slots(ffm_info):
+    slots = {}
+    for slot in range(1, int(core.SLOT_COUNT) + 1):
+        color_key = f"ffmColor{slot}"
+        material_key = f"ffmType{slot}"
+        slots[str(slot)] = {
+            "slot": slot,
+            "color": _normalize_color(ffm_info.get(color_key)),
+            "material": _normalize_material(ffm_info.get(material_key)),
+            "source_keys": {
+                "color": color_key,
+                "material": material_key,
+            },
+        }
     return slots
 
 
@@ -314,25 +380,86 @@ def zmod_filament_metadata(force=False):
             object_status = _query_objects(selected)
             interesting_objects = _interesting(object_status) or {}
             file_sources = _read_metadata_files()
-            combined = {
-                "objects": interesting_objects,
-                "files": file_sources,
-            }
-            payload = {
-                "available": bool(interesting_objects or file_sources),
-                "read_only": True,
-                "write_actions_enabled": False,
-                "checked_at": checked_at,
-                "cache_ttl_seconds": ZMOD_METADATA_CACHE_SECONDS,
-                "registered_candidates": selected,
-                "registered_zmod_objects": [
-                    name for name in objects if "zmod" in name.lower()
-                ],
-                "sources": combined,
-                "slots": _slot_candidates(combined),
-                "active_slot": core.state_snapshot().get("active_slot"),
-                "reason": None if (interesting_objects or file_sources) else "metadata_source_not_found",
-            }
+            primary = _select_primary_source(file_sources)
+
+            if primary is None:
+                payload = {
+                    "available": False,
+                    "read_only": True,
+                    "write_actions_enabled": False,
+                    "checked_at": checked_at,
+                    "cache_ttl_seconds": ZMOD_METADATA_CACHE_SECONDS,
+                    "registered_candidates": selected,
+                    "registered_zmod_objects": [
+                        name for name in objects if "zmod" in name.lower()
+                    ],
+                    "source": None,
+                    "mirrors": [],
+                    "slots": {
+                        str(index): {
+                            "slot": index,
+                            "color": None,
+                            "material": None,
+                            "source_keys": {
+                                "color": f"ffmColor{index}",
+                                "material": f"ffmType{index}",
+                            },
+                        }
+                        for index in range(1, int(core.SLOT_COUNT) + 1)
+                    },
+                    "active_slot": core.state_snapshot().get("active_slot"),
+                    "diagnostics": {
+                        "objects": interesting_objects,
+                        "files": file_sources,
+                        "service_fields": {},
+                    },
+                    "reason": "ffminfo_source_not_found",
+                }
+            else:
+                ffm_info = primary["ffm_info"]
+                file_active_slot = _normalize_channel(ffm_info.get("channel"))
+                service_fields = {
+                    "ffmColor0": ffm_info.get("ffmColor0"),
+                    "ffmType0": ffm_info.get("ffmType0"),
+                }
+                payload = {
+                    "available": True,
+                    "read_only": True,
+                    "write_actions_enabled": False,
+                    "checked_at": checked_at,
+                    "cache_ttl_seconds": ZMOD_METADATA_CACHE_SECONDS,
+                    "registered_candidates": selected,
+                    "registered_zmod_objects": [
+                        name for name in objects if "zmod" in name.lower()
+                    ],
+                    "source": {
+                        "path": primary["path"],
+                        "realpath": primary["realpath"],
+                        "section": "FFMInfo",
+                    },
+                    "mirrors": [
+                        {
+                            "path": entry["path"],
+                            "realpath": entry.get("realpath"),
+                            "mirror_of": entry.get("mirror_of") or primary["path"],
+                        }
+                        for entry in file_sources
+                        if entry["path"] != primary["path"]
+                        and entry.get("readable")
+                        and entry.get("valid")
+                        and _ffm_signature(entry.get("ffm_info", {}))
+                        == _ffm_signature(ffm_info)
+                    ],
+                    "slots": _normalized_slots(ffm_info),
+                    "active_slot": file_active_slot,
+                    "runtime_active_slot": core.state_snapshot().get("active_slot"),
+                    "diagnostics": {
+                        "objects": interesting_objects,
+                        "files": file_sources,
+                        "service_fields": service_fields,
+                    },
+                    "reason": None,
+                }
         except Exception as exc:
             payload = {
                 "available": False,
@@ -342,9 +469,26 @@ def zmod_filament_metadata(force=False):
                 "cache_ttl_seconds": ZMOD_METADATA_CACHE_SECONDS,
                 "registered_candidates": [],
                 "registered_zmod_objects": [],
-                "sources": {"objects": {}, "files": []},
-                "slots": {str(index): {} for index in range(1, int(core.SLOT_COUNT) + 1)},
+                "source": None,
+                "mirrors": [],
+                "slots": {
+                    str(index): {
+                        "slot": index,
+                        "color": None,
+                        "material": None,
+                        "source_keys": {
+                            "color": f"ffmColor{index}",
+                            "material": f"ffmType{index}",
+                        },
+                    }
+                    for index in range(1, int(core.SLOT_COUNT) + 1)
+                },
                 "active_slot": core.state_snapshot().get("active_slot"),
+                "diagnostics": {
+                    "objects": {},
+                    "files": [],
+                    "service_fields": {},
+                },
                 "reason": "metadata_probe_failed",
                 "error": str(exc),
             }
@@ -363,6 +507,7 @@ def public_config():
         "endpoint": "/api/zmod/filaments",
         "read_only": True,
         "write_actions_enabled": False,
+        "schema": "ffminfo-v1",
     }
     return payload
 
@@ -385,8 +530,9 @@ def build_health():
     health["components"]["zmod_metadata"] = {
         "ok": metadata["available"],
         "read_only": True,
-        "registered_candidates": metadata.get("registered_candidates", []),
-        "source_file_count": len(metadata.get("sources", {}).get("files", [])),
+        "schema": "ffminfo-v1",
+        "source": metadata.get("source"),
+        "mirror_count": len(metadata.get("mirrors", [])),
         "reason": metadata.get("reason"),
     }
 
