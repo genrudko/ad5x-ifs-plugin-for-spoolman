@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase B4 repair: expose local inventory without altering provider selection."""
+"""Phase B4: use verified local inventory as the auto-provider fallback."""
 
 import urllib.parse
 
@@ -9,8 +9,39 @@ import ifs_spoolman_ui as ui
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.8.0-beta-repair1"
+RUNTIME_VERSION = "0.8.1-beta"
 _BaseHandler = ui.UiRuntimeHandler
+_original_probe_spoolman = runtime._probe_spoolman
+_original_get_moonraker_status = runtime._original_get_moonraker_status
+_original_set_active_spool = runtime._original_set_active_spool
+_original_list_spools = runtime._original_list_spools
+_original_synchronize = runtime._original_synchronize
+
+runtime.VALID_PROVIDERS.add("local")
+
+
+def inventory_status():
+    configured = runtime._inventory_config["provider"]
+    connected, moonraker = _original_probe_spoolman()
+
+    if configured == "auto":
+        effective = "spoolman" if connected else "local"
+    else:
+        effective = configured
+
+    available = effective in {"none", "local"} or connected
+    return {
+        "configured_provider": configured,
+        "provider": effective,
+        "available": available,
+        "connected": connected if effective == "spoolman" else False,
+        "local_available": True,
+        "external_service_required": effective == "spoolman",
+        "fallback_active": configured == "auto" and effective == "local",
+        "config_file": runtime.INVENTORY_CONFIG_FILE,
+        "moonraker": moonraker,
+        "supported_providers": ["auto", "local", "spoolman", "none"],
+    }
 
 
 def local_inventory(force=False):
@@ -44,6 +75,71 @@ def local_inventory(force=False):
     }
 
 
+def get_moonraker_status():
+    status = inventory_status()
+    runtime._set_inventory_state(status)
+    if status["provider"] in {"none", "local"}:
+        return {
+            "spoolman_connected": False,
+            "spool_id": None,
+            "inventory_provider": status["provider"],
+        }
+    return _original_get_moonraker_status()
+
+
+def set_active_spool(spool_id):
+    status = inventory_status()
+    runtime._set_inventory_state(status)
+    if status["provider"] != "spoolman":
+        return None
+    return _original_set_active_spool(spool_id)
+
+
+def list_spools():
+    status = inventory_status()
+    runtime._set_inventory_state(status)
+    if status["provider"] != "spoolman" or not status["connected"]:
+        return []
+    return _original_list_spools()
+
+
+def synchronize(force=False, slot=None, reason="manual"):
+    status = inventory_status()
+    runtime._set_inventory_state(status)
+
+    if status["provider"] == "spoolman":
+        return _original_synchronize(force=force, slot=slot, reason=reason)
+
+    if slot is None:
+        raw_slot = core.read_active_slot()
+        slot, confirmation_values = core.confirm_active_slot(raw_slot)
+        if slot is None:
+            core.set_state(
+                last_sync_reason="slot_not_confirmed",
+                confirmation_values=confirmation_values,
+            )
+            if force:
+                raise RuntimeError("Активный слот IFS не подтверждён")
+            return False
+
+    core.set_state(
+        active_slot=slot,
+        confirmed_active_slot=slot,
+        desired_spool_id=None,
+        moonraker_spool_id=None,
+        moonraker_status_ok=True,
+        spoolman_connected=False,
+        last_error=None,
+        last_sync_result=(
+            "local_inventory_active"
+            if status["provider"] == "local"
+            else "inventory_disabled"
+        ),
+        last_sync_reason=reason,
+    )
+    return False
+
+
 class LocalRuntimeHandler(_BaseHandler):
     def do_GET(self):
         parsed = urllib.parse.urlsplit(self.path)
@@ -64,11 +160,21 @@ class LocalRuntimeHandler(_BaseHandler):
         super().do_GET()
 
 
+runtime.inventory_status = inventory_status
+runtime.get_moonraker_status = get_moonraker_status
+runtime.set_active_spool = set_active_spool
+runtime.list_spools = list_spools
+runtime.synchronize = synchronize
 runtime.RUNTIME_VERSION = RUNTIME_VERSION
 writer.RUNTIME_VERSION = RUNTIME_VERSION
 ui.RUNTIME_VERSION = RUNTIME_VERSION
 core.APP_VERSION = RUNTIME_VERSION
+core.get_moonraker_status = get_moonraker_status
+core.set_active_spool = set_active_spool
+core.list_spools = list_spools
+core.synchronize = synchronize
 core.Handler = LocalRuntimeHandler
+runtime._set_inventory_state(inventory_status())
 
 
 if __name__ == "__main__":
