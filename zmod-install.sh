@@ -38,7 +38,7 @@ download_file() {
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Manager — Phase B1 Z-Mod metadata discovery ==="
+echo "=== AD5X IFS Manager — Phase B1 normalized Z-Mod metadata ==="
 
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
@@ -108,8 +108,8 @@ fi
 echo
 echo "=== $RESULT_TEXT ==="
 echo "Ветка разработки: $REF"
+echo "Версия: $(cat "$TARGET_DIR/VERSION")"
 echo "Spoolman необязателен; provider=auto."
-echo "Статус провайдера: http://IP_ПРИНТЕРА:7913/api/inventory/status"
-echo "Метаданные Z-Mod: http://IP_ПРИНТЕРА:7913/api/zmod/filaments?refresh=1"
+echo "Нормализованные данные Z-Mod: http://IP_ПРИНТЕРА:7913/api/zmod/filaments?refresh=1"
 echo "Проверка состояния:"
 echo "$TARGET_DIR/status.sh"
