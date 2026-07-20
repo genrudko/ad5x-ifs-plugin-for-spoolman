@@ -25,6 +25,7 @@ ifs-spoolman-layout.js
 ifs-spoolman-dashboard.js
 ifs-spoolman-visibility.js
 ifs-spoolman-selection.js
+ifs-spoolman-controls.js
 install_fluidd_card.sh
 uninstall_fluidd_card.sh
 boot_start.sh
