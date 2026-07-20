@@ -12,8 +12,9 @@ import ifs_spoolman as core
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.7.10-beta"
+RUNTIME_VERSION = "0.7.11-beta"
 MANAGER_HTML = os.path.join(core.APP_DIR, "zmod-filaments.html")
+MANAGER_LIVE_JS = os.path.join(core.APP_DIR, "zmod-filaments-live.js")
 IFS_STATUS_CACHE_SECONDS = 1.0
 IFS_STATUS_GCODE_COUNT = 1000
 IFS_STATUS_POLL_ATTEMPTS = 10
@@ -173,6 +174,7 @@ def public_config():
     payload = _original_public_config()
     payload["application_version"] = RUNTIME_VERSION
     payload["zmod_metadata"]["manager_url"] = "/manager"
+    payload["zmod_metadata"]["auto_refresh_seconds"] = 8
     payload["ifs_slots"] = {"endpoint": "/api/ifs/slots", "read_only": True}
     return payload
 
@@ -184,6 +186,7 @@ def build_health():
     health.setdefault("components", {}).setdefault("zmod_metadata", {})[
         "manager_url"
     ] = "/manager"
+    health["components"]["zmod_metadata"]["auto_refresh_seconds"] = 8
     health["components"]["ifs_slots"] = {
         "ok": presence.get("available") is True,
         "stale": presence.get("stale") is True,
@@ -193,6 +196,17 @@ def build_health():
     return health
 
 
+def _send_static(handler, path, content_type):
+    with open(path, "rb") as stream:
+        raw = stream.read()
+    handler.send_response(200)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(raw)))
+    handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
+    handler.wfile.write(raw)
+
+
 class UiRuntimeHandler(_BaseHandler):
     def do_GET(self):
         parsed = urllib.parse.urlsplit(self.path)
@@ -200,8 +214,12 @@ class UiRuntimeHandler(_BaseHandler):
         query = urllib.parse.parse_qs(parsed.query)
         if path in {"/manager", "/manager/", "/zmod-filaments.html"}:
             try:
-                with open(MANAGER_HTML, "rb") as stream:
-                    raw = stream.read()
+                with open(MANAGER_HTML, "r", encoding="utf-8") as stream:
+                    text = stream.read()
+                live_tag = '<script defer src="/zmod-filaments-live.js"></script>'
+                if live_tag not in text:
+                    text = text.replace("</body>", live_tag + "\n</body>", 1)
+                raw = text.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(raw)))
@@ -210,6 +228,14 @@ class UiRuntimeHandler(_BaseHandler):
                 self.wfile.write(raw)
             except FileNotFoundError:
                 self.send_json(404, {"error": "Страница менеджера не установлена"})
+            except Exception as exc:
+                self.send_json(500, {"error": str(exc)})
+            return
+        if path == "/zmod-filaments-live.js":
+            try:
+                _send_static(self, MANAGER_LIVE_JS, "application/javascript; charset=utf-8")
+            except FileNotFoundError:
+                self.send_json(404, {"error": "Скрипт автообновления не установлен"})
             except Exception as exc:
                 self.send_json(500, {"error": str(exc)})
             return
