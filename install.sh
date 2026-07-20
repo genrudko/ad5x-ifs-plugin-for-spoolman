@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-APP_NAME="AD5X IFS Plugin for Spoolman"
+APP_NAME="AD5X IFS Manager"
 TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"
 REPO_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 NO_START=0
@@ -19,7 +19,7 @@ case "${1:-}" in
         ;;
 esac
 
-PLUGIN_FILES="ifs_spoolman.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
+PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
 SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh"
 
 for FILE in $PLUGIN_FILES; do
@@ -48,7 +48,7 @@ cp "$REPO_DIR/install.sh" "$TARGET_DIR/install.sh"
 cp "$REPO_DIR/VERSION" "$TARGET_DIR/VERSION"
 cp "$REPO_DIR/PACKAGE_MANIFEST.txt" "$TARGET_DIR/PACKAGE_MANIFEST.txt"
 
-for FILE in config assignments; do
+for FILE in config assignments inventory; do
     if [ ! -f "$TARGET_DIR/$FILE.json" ] && [ -f "$REPO_DIR/examples/$FILE.example.json" ]; then
         cp "$REPO_DIR/examples/$FILE.example.json" "$TARGET_DIR/$FILE.json"
     fi
