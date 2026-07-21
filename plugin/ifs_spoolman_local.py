@@ -9,7 +9,7 @@ import ifs_spoolman_ui as ui
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.8.1-beta"
+RUNTIME_VERSION = "0.8.2-beta"
 _BaseHandler = ui.UiRuntimeHandler
 _original_probe_spoolman = runtime._probe_spoolman
 _original_get_moonraker_status = runtime._original_get_moonraker_status
