@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const POLL_INTERVAL_MS = 8000;
+  const POLL_INTERVAL_MS = 15000;
   const ACTIVE_CLASS = "active";
   const EMPTY_CLASS = "empty";
   const DIRTY_CLASS = "ifs-editor-dirty";
@@ -95,7 +95,7 @@
     try {
       const [metadata, presence] = await Promise.all([
         api("/api/zmod/filaments"),
-        api("/api/ifs/slots?refresh=1")
+        api("/api/ifs/slots")
       ]);
       const currentSignature = signature(metadata, presence);
 
@@ -125,16 +125,16 @@
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-      schedule(250);
+      schedule(500);
     }
   });
 
-  window.addEventListener("focus", () => schedule(250));
+  window.addEventListener("focus", () => schedule(500));
   window.addEventListener("beforeunload", () => {
     stopped = true;
     window.clearTimeout(timer);
   });
 
   watchEditorChanges();
-  schedule(3000);
+  schedule(5000);
 })();
