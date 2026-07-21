@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Phase B4: use verified local inventory as the auto-provider fallback."""
 
+import os
 import urllib.parse
 
 import ifs_spoolman as core
@@ -9,7 +10,8 @@ import ifs_spoolman_ui as ui
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.8.2-beta"
+RUNTIME_VERSION = "0.8.3-beta"
+PROVIDER_UI_JS = os.path.join(core.APP_DIR, "zmod-inventory-provider.js")
 _BaseHandler = ui.UiRuntimeHandler
 _original_probe_spoolman = runtime._probe_spoolman
 _original_get_moonraker_status = runtime._original_get_moonraker_status
@@ -140,10 +142,46 @@ def synchronize(force=False, slot=None, reason="manual"):
     return False
 
 
+def _send_manager(handler):
+    with open(ui.MANAGER_HTML, "r", encoding="utf-8") as stream:
+        text = stream.read()
+    tags = (
+        '<script defer src="/zmod-filaments-live.js"></script>',
+        '<script defer src="/zmod-inventory-provider.js"></script>',
+    )
+    for tag in tags:
+        if tag not in text:
+            text = text.replace("</body>", tag + "\n</body>", 1)
+    raw = text.encode("utf-8")
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Content-Length", str(len(raw)))
+    handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
+    handler.wfile.write(raw)
+
+
 class LocalRuntimeHandler(_BaseHandler):
     def do_GET(self):
         parsed = urllib.parse.urlsplit(self.path)
-        if parsed.path == "/api/inventory/local":
+        path = parsed.path
+        if path in {"/manager", "/manager/", "/zmod-filaments.html"}:
+            try:
+                _send_manager(self)
+            except FileNotFoundError:
+                self.send_json(404, {"error": "Страница менеджера не установлена"})
+            except Exception as exc:
+                self.send_json(500, {"error": str(exc)})
+            return
+        if path == "/zmod-inventory-provider.js":
+            try:
+                ui._send_static(self, PROVIDER_UI_JS, "application/javascript; charset=utf-8")
+            except FileNotFoundError:
+                self.send_json(404, {"error": "Скрипт выбора провайдера не установлен"})
+            except Exception as exc:
+                self.send_json(500, {"error": str(exc)})
+            return
+        if path == "/api/inventory/local":
             query = urllib.parse.parse_qs(parsed.query)
             force = query.get("refresh", [""])[0].lower() in {"1", "true", "yes"}
             try:
