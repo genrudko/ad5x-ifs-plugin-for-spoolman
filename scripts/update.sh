@@ -21,6 +21,7 @@ ifs_spoolman_ui.py
 ifs_spoolman_local.py
 zmod-filaments.html
 zmod-filaments-live.js
+zmod-inventory-provider.js
 ui_v0_2.html
 ifs-spoolman-card.js
 ifs-spoolman-layout.js
@@ -79,6 +80,7 @@ sleep 3
 if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then rollback; exit 1; fi
 if ! wget -qO- http://127.0.0.1:7913/manager >/dev/null 2>&1; then rollback; exit 1; fi
 if ! wget -qO- http://127.0.0.1:7913/zmod-filaments-live.js >/dev/null 2>&1; then rollback; exit 1; fi
+if ! wget -qO- http://127.0.0.1:7913/zmod-inventory-provider.js >/dev/null 2>&1; then rollback; exit 1; fi
 if ! wget -qO- http://127.0.0.1:7913/api/inventory/local >/dev/null 2>&1; then rollback; exit 1; fi
 
 echo "$APP_NAME обновлён."
