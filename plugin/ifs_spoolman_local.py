@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase B4: use verified local inventory as the auto-provider fallback."""
+"""Phase B4: local inventory, provider UI and event-driven IFS refresh support."""
 
 import os
 import urllib.parse
@@ -10,7 +10,7 @@ import ifs_spoolman_ui as ui
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.8.3-beta"
+RUNTIME_VERSION = "0.8.4-beta"
 PROVIDER_UI_JS = os.path.join(core.APP_DIR, "zmod-inventory-provider.js")
 _BaseHandler = ui.UiRuntimeHandler
 _original_probe_spoolman = runtime._probe_spoolman
@@ -43,6 +43,39 @@ def inventory_status():
         "config_file": runtime.INVENTORY_CONFIG_FILE,
         "moonraker": moonraker,
         "supported_providers": ["auto", "local", "spoolman", "none"],
+    }
+
+
+def printer_activity():
+    print_state = "unknown"
+    filename = None
+    error = None
+    try:
+        response = core.http_json(
+            core.MOONRAKER + "/printer/objects/query?print_stats=state,filename",
+            timeout=max(float(core.HTTP_TIMEOUT), 3.0),
+        )
+        status = response.get("result", {}).get("status", {})
+        print_stats = status.get("print_stats", {})
+        if isinstance(print_stats, dict):
+            print_state = str(print_stats.get("state") or "unknown").lower()
+            filename = print_stats.get("filename")
+    except Exception as exc:
+        error = str(exc)
+
+    snapshot = core.state_snapshot()
+    active_slot = snapshot.get("confirmed_active_slot")
+    if active_slot is None:
+        active_slot = snapshot.get("active_slot")
+
+    return {
+        "print_state": print_state,
+        "printing": print_state in {"printing", "paused"},
+        "filename": filename,
+        "active_slot": active_slot,
+        "source": "Moonraker print_stats + plugin state",
+        "gcode_executed": False,
+        "error": error,
     }
 
 
@@ -180,6 +213,9 @@ class LocalRuntimeHandler(_BaseHandler):
                 self.send_json(404, {"error": "Скрипт выбора провайдера не установлен"})
             except Exception as exc:
                 self.send_json(500, {"error": str(exc)})
+            return
+        if path == "/api/printer/activity":
+            self.send_json(200, printer_activity())
             return
         if path == "/api/inventory/local":
             query = urllib.parse.parse_qs(parsed.query)
