@@ -58,6 +58,7 @@ for FILE in \
     plugin/ifs_spoolman_ui.py \
     plugin/ifs_spoolman_local.py \
     plugin/ifs_spoolman_control.py \
+    plugin/ifs_spoolman_planner.py \
     plugin/zmod-filaments.html \
     plugin/zmod-filaments-live.js \
     plugin/zmod-inventory-provider.js \
@@ -106,4 +107,5 @@ echo "Версия: $(cat "$TARGET_DIR/VERSION")"
 echo "Провайдеры учёта: auto, local, spoolman, none."
 echo "Комбинированное отображение локальных данных и Spoolman доступно в менеджере."
 echo "Read-only readiness API: http://IP_ПРИНТЕРА:7913/api/ifs/control/readiness"
+echo "Read-only operation plan API: http://IP_ПРИНТЕРА:7913/api/ifs/control/plan?action=unload"
 echo "Менеджер: http://IP_ПРИНТЕРА:7913/manager"
