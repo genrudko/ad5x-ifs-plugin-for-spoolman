@@ -13,7 +13,7 @@ case "${1:-}" in
     *) echo "Unknown argument: $1"; exit 2 ;;
 esac
 
-PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ifs_spoolman_writer.py ifs_spoolman_ui.py ifs_spoolman_local.py ifs_spoolman_control.py zmod-filaments.html zmod-filaments-live.js zmod-inventory-provider.js zmod-combined-inventory.js ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js ifs-spoolman-controls.js"
+PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ifs_spoolman_writer.py ifs_spoolman_ui.py ifs_spoolman_local.py ifs_spoolman_control.py ifs_spoolman_planner.py zmod-filaments.html zmod-filaments-live.js zmod-inventory-provider.js zmod-combined-inventory.js ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js ifs-spoolman-controls.js"
 SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh"
 
 for FILE in $PLUGIN_FILES; do [ -f "$REPO_DIR/plugin/$FILE" ] || { echo "Missing plugin/$FILE"; exit 1; }; done
@@ -72,8 +72,6 @@ fi
 chmod +x "$TARGET_DIR"/*.sh
 if ! "$TARGET_DIR/start.sh"; then rollback; exit 1; fi
 
-# Startup can be slow on AD5X. Retry each read-only endpoint for up to 24 seconds.
-# Do not probe /api/inventory/local here: on a cold cache it may issue IFS_STATUS G-code.
 for URL in \
     http://127.0.0.1:7913/api/health \
     http://127.0.0.1:7913/manager \
@@ -83,7 +81,9 @@ for URL in \
     http://127.0.0.1:7913/api/status \
     http://127.0.0.1:7913/api/spools \
     http://127.0.0.1:7913/api/inventory/combined \
-    http://127.0.0.1:7913/api/ifs/control/readiness
+    http://127.0.0.1:7913/api/ifs/control/readiness \
+    http://127.0.0.1:7913/api/ifs/control/contract \
+    "http://127.0.0.1:7913/api/ifs/control/plan?action=unload"
 do
     if ! check_url "$URL"; then rollback; exit 1; fi
 done
