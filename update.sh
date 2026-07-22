@@ -43,6 +43,21 @@ rollback() {
     "$TARGET_DIR/start.sh" 2>/dev/null || true
 }
 
+check_url() {
+    URL="$1"
+    ATTEMPT=1
+    while [ "$ATTEMPT" -le 12 ]; do
+        if wget -qO- "$URL" >/dev/null 2>&1; then
+            echo "Health OK: $URL"
+            return 0
+        fi
+        sleep 2
+        ATTEMPT=$((ATTEMPT + 1))
+    done
+    echo "Health FAILED: $URL" >&2
+    return 1
+}
+
 "$TARGET_DIR/stop.sh" || true
 for FILE in $PLUGIN_FILES; do cp "$REPO_DIR/plugin/$FILE" "$TARGET_DIR/$FILE"; done
 for FILE in $SCRIPT_FILES; do cp "$REPO_DIR/scripts/$FILE" "$TARGET_DIR/$FILE"; done
@@ -56,17 +71,20 @@ fi
 
 chmod +x "$TARGET_DIR"/*.sh
 if ! "$TARGET_DIR/start.sh"; then rollback; exit 1; fi
-sleep 3
+
+# Startup can be slow on AD5X. Retry each read-only endpoint for up to 24 seconds.
+# Do not probe /api/inventory/local here: on a cold cache it may issue IFS_STATUS G-code.
 for URL in \
     http://127.0.0.1:7913/api/health \
     http://127.0.0.1:7913/manager \
     http://127.0.0.1:7913/zmod-filaments-live.js \
     http://127.0.0.1:7913/zmod-inventory-provider.js \
     http://127.0.0.1:7913/zmod-combined-inventory.js \
-    http://127.0.0.1:7913/api/inventory/local \
+    http://127.0.0.1:7913/api/status \
+    http://127.0.0.1:7913/api/spools \
     http://127.0.0.1:7913/api/inventory/combined
 do
-    if ! wget -qO- "$URL" >/dev/null 2>&1; then rollback; exit 1; fi
+    if ! check_url "$URL"; then rollback; exit 1; fi
 done
 
 echo "$APP_NAME updated."
