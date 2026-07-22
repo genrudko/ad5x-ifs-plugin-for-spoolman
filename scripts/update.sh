@@ -19,6 +19,9 @@ ifs_spoolman_runtime.py
 ifs_spoolman_writer.py
 ifs_spoolman_ui.py
 ifs_spoolman_local.py
+ifs_spoolman_control.py
+ifs_spoolman_planner.py
+ifs_spoolman_planner_v016.py
 zmod-filaments.html
 zmod-filaments-live.js
 zmod-inventory-provider.js
@@ -59,7 +62,7 @@ fi
 STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"
 mkdir -p "$BACKUP_DIR"
-for FILE in $REQUIRED_FILES config.json assignments.json inventory.json; do
+for FILE in $REQUIRED_FILES config.json assignments.json inventory.json pending_operation.json; do
     [ -f "$TARGET_DIR/$FILE" ] && cp "$TARGET_DIR/$FILE" "$BACKUP_DIR/$FILE"
 done
 
@@ -85,7 +88,11 @@ for URL in \
     http://127.0.0.1:7913/zmod-inventory-provider.js \
     http://127.0.0.1:7913/zmod-combined-inventory.js \
     http://127.0.0.1:7913/api/inventory/local \
-    http://127.0.0.1:7913/api/inventory/combined
+    http://127.0.0.1:7913/api/inventory/combined \
+    http://127.0.0.1:7913/api/ifs/control/readiness \
+    http://127.0.0.1:7913/api/ifs/control/contract \
+    http://127.0.0.1:7913/api/ifs/control/operation
+
 do
     if ! wget -qO- "$URL" >/dev/null 2>&1; then rollback; exit 1; fi
 done
