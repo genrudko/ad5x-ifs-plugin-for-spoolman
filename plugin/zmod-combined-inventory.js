@@ -33,16 +33,38 @@
     const style = document.createElement("style");
     style.id = "combined-inventory-styles";
     style.textContent = `
+      .slot-head{align-items:flex-start;min-height:42px;margin-bottom:7px}
+      .slot-head>div:last-child{min-width:0;padding-top:1px}
+      .presence{line-height:1.2}
+      .empty-note{display:block!important;margin:2px 0 0!important;font-size:9px!important;line-height:1.15;color:#aeb8cc}
+      .actions{gap:5px}
+      .actions button{min-width:0;padding-left:9px;padding-right:9px}
+      .palette-line{min-height:25px}
+      .palette-toggle{align-self:center;white-space:nowrap}
+
       .combined-inventory{margin-top:7px;padding-top:7px;border-top:1px solid rgba(148,163,184,.14)}
       .combined-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;color:#9eabc4;font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
       .combined-badge{padding:2px 6px;border:1px solid rgba(91,140,255,.28);border-radius:999px;background:rgba(91,140,255,.09);color:#8fb0ff;font-size:8px;letter-spacing:0;text-transform:none}
       .combined-card{display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px;padding:7px 8px;border:1px solid rgba(148,163,184,.16);border-radius:9px;background:rgba(26,35,56,.62)}
       .combined-swatch{width:34px;height:34px;border:4px solid rgba(255,255,255,.14);border-radius:50%;background:#64748b;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
-      .combined-main{min-width:0}.combined-topline{display:flex;align-items:baseline;gap:7px;min-width:0}.combined-name{font-size:11px;font-weight:800;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.combined-vendor{flex:0 0 auto;color:#9eabc4;font-size:9px}
-      .combined-detail{display:flex;align-items:center;gap:6px;min-width:0;margin-top:3px}.combined-meta{display:flex;gap:4px;flex:0 0 auto}.combined-pill{padding:1px 5px;border:1px solid rgba(148,163,184,.16);border-radius:999px;color:#b9c4d9;font-size:8px}.combined-weight{min-width:0;color:#cdd6e7;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .combined-progress{height:3px;margin-top:4px;overflow:hidden;border-radius:999px;background:rgba(148,163,184,.16)}.combined-progress>span{display:block;height:100%;border-radius:inherit;background:#5b8cff}
-      .combined-empty,.combined-offline{padding:7px 8px;border:1px dashed rgba(148,163,184,.20);border-radius:9px;color:#9eabc4;font-size:9px;line-height:1.35}.combined-warning{margin-top:3px;color:#f5c451;font-size:8px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      @media(max-width:760px){.combined-card{grid-template-columns:30px minmax(0,1fr)}.combined-swatch{width:30px;height:30px}.combined-detail{flex-wrap:wrap}}
+      .combined-main{min-width:0}
+      .combined-topline{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:7px;min-width:0}
+      .combined-name{min-width:0;font-size:11px;font-weight:800;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .combined-vendor{max-width:105px;color:#9eabc4;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .combined-detail{display:flex;align-items:center;gap:6px;min-width:0;margin-top:3px}
+      .combined-meta{display:flex;gap:4px;flex:0 0 auto}
+      .combined-pill{padding:1px 5px;border:1px solid rgba(148,163,184,.16);border-radius:999px;color:#b9c4d9;font-size:8px}
+      .combined-weight{min-width:0;color:#cdd6e7;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .combined-progress{height:3px;margin-top:4px;overflow:hidden;border-radius:999px;background:rgba(148,163,184,.16)}
+      .combined-progress>span{display:block;height:100%;border-radius:inherit;background:#5b8cff}
+      .combined-empty,.combined-offline{padding:7px 8px;border:1px dashed rgba(148,163,184,.20);border-radius:9px;color:#9eabc4;font-size:9px;line-height:1.35}
+      .combined-warning{margin-top:4px;color:#f5c451;font-size:9px;font-weight:750;line-height:1.2;white-space:normal}
+      @media(max-width:760px){
+        .combined-card{grid-template-columns:30px minmax(0,1fr)}
+        .combined-swatch{width:30px;height:30px}
+        .combined-detail{flex-wrap:wrap}
+        .combined-vendor{max-width:90px}
+      }
     `;
     document.head.appendChild(style);
   }
@@ -57,7 +79,6 @@
     section.className = "combined-inventory";
 
     const inventory = slotData.inventory || {};
-    const local = slotData.local || {};
     const provider = slotData.provider || "local";
     const titleBadge = provider === "spoolman" ? "Spoolman" : "Локально";
 
@@ -79,7 +100,7 @@
         <div class="combined-card">
           <div class="combined-swatch" style="background:${esc(color)}"></div>
           <div class="combined-main">
-            <div class="combined-topline"><div class="combined-name">${esc(inventory.name || `Катушка #${inventory.spool_id}`)}</div><div class="combined-vendor">${esc(inventory.vendor || "Без производителя")}</div></div>
+            <div class="combined-topline"><div class="combined-name" title="${esc(inventory.name || `Катушка #${inventory.spool_id}`)}">${esc(inventory.name || `Катушка #${inventory.spool_id}`)}</div><div class="combined-vendor" title="${esc(inventory.vendor || "Без производителя")}">${esc(inventory.vendor || "Без производителя")}</div></div>
             <div class="combined-detail"><div class="combined-meta"><span class="combined-pill">ID ${esc(inventory.spool_id)}</span><span class="combined-pill">${esc(inventory.material || "Материал не указан")}</span></div><div class="combined-weight">Остаток: ${formatWeight(remaining)} / ${formatWeight(initial)}${percent === null ? "" : ` · ${Math.round(percent)}%`}</div></div>
             ${percent === null ? "" : `<div class="combined-progress"><span style="width:${percent.toFixed(1)}%"></span></div>`}
             ${slotData.mismatch ? `<div class="combined-warning">Локальные параметры слота отличаются от данных Spoolman</div>` : ""}
