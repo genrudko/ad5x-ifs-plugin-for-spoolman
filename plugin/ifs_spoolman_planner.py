@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Validated, read-only operation planner for AD5X IFS control.
+"""Validated planner and guarded two-step executor for AD5X IFS control.
 
-This layer selects the observed Z-Mod macro contract and builds deterministic
-operation plans. It never sends G-code and exposes no write endpoint.
+GET endpoints remain read-only. A write operation requires two explicit POSTs:
+prepare creates a short-lived one-time token for an executable plan; execute
+rebuilds and compares the plan, rechecks blockers, consumes the token, and only
+then submits the validated G-code script to Moonraker.
 """
 
+import json
+import secrets
+import threading
+import time
 import urllib.parse
+import urllib.request
 
 import ifs_spoolman as core
 import ifs_spoolman_control as control
@@ -15,8 +22,10 @@ import ifs_spoolman_ui as ui
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.8.13-beta"
+RUNTIME_VERSION = "0.8.14-beta"
 _BaseHandler = core.Handler
+TOKEN_TTL_SECONDS = 90
+CONFIRMATION_PHRASE = "EXECUTE_IFS_OPERATION"
 
 CONTRACT = {
     "load_or_switch": {
@@ -56,6 +65,10 @@ MATERIAL_TEMPERATURES = {
     "ASA": 250,
     "TPU": 220,
 }
+
+_token_lock = threading.RLock()
+_pending_tokens = {}
+_execution_lock = threading.Lock()
 
 
 def _normalize_slot(value):
@@ -115,6 +128,13 @@ def _command(macro, parameters):
     return " ".join(parts)
 
 
+def _validated_warnings(readiness):
+    return [
+        item for item in readiness.get("warnings", [])
+        if item.get("code") != "control_macro_contract_unverified"
+    ]
+
+
 def operation_plan(action, slot=None, material=None, temperature=None):
     action = str(action or "").strip().lower()
     aliases = {"load": "load", "switch": "switch", "change": "switch", "unload": "unload"}
@@ -124,7 +144,7 @@ def operation_plan(action, slot=None, material=None, temperature=None):
 
     readiness, cached = _runtime_snapshot()
     blockers = list(readiness.get("blockers", []))
-    warnings = list(readiness.get("warnings", []))
+    warnings = _validated_warnings(readiness)
     active_slot = readiness.get("ifs", {}).get("active_slot")
 
     if action == "unload":
@@ -185,8 +205,8 @@ def operation_plan(action, slot=None, material=None, temperature=None):
         "version": RUNTIME_VERSION,
         "checked_at": core.timestamp_now(),
         "read_only": True,
-        "control_enabled": False,
-        "write_endpoints_enabled": False,
+        "control_enabled": True,
+        "write_endpoints_enabled": True,
         "gcode_executed": False,
         "contract_selected": True,
         "plan_executable": not blockers,
@@ -205,8 +225,11 @@ def operation_plan(action, slot=None, material=None, temperature=None):
         "blockers": blockers,
         "warnings": warnings,
         "execution": {
-            "available": False,
-            "reason": "Патч формирует только план и не выполняет G-code",
+            "available": not blockers,
+            "prepare_endpoint": "/api/ifs/control/prepare",
+            "execute_endpoint": "/api/ifs/control/execute",
+            "token_ttl_seconds": TOKEN_TTL_SECONDS,
+            "confirmation_phrase": CONFIRMATION_PHRASE,
         },
     }
 
@@ -225,8 +248,8 @@ def contract_summary():
         "version": RUNTIME_VERSION,
         "checked_at": core.timestamp_now(),
         "read_only": True,
-        "control_enabled": False,
-        "write_endpoints_enabled": False,
+        "control_enabled": True,
+        "write_endpoints_enabled": True,
         "gcode_executed": False,
         "contract_selected": True,
         "selected": selected,
@@ -237,7 +260,124 @@ def contract_summary():
             "M600": "интерактивная пауза для печати, не самостоятельное управление IFS",
         },
         "temperature_profiles": MATERIAL_TEMPERATURES,
+        "execution_protocol": {
+            "prepare": "POST /api/ifs/control/prepare",
+            "execute": "POST /api/ifs/control/execute",
+            "token_ttl_seconds": TOKEN_TTL_SECONDS,
+            "confirmation_phrase": CONFIRMATION_PHRASE,
+        },
     }
+
+
+def _purge_expired_tokens():
+    now = time.monotonic()
+    expired = [token for token, entry in _pending_tokens.items() if entry["expires_at"] <= now]
+    for token in expired:
+        _pending_tokens.pop(token, None)
+
+
+def prepare_operation(body):
+    plan = operation_plan(
+        action=body.get("action"),
+        slot=body.get("slot"),
+        material=body.get("material"),
+        temperature=body.get("temperature"),
+    )
+    if not plan["plan_executable"]:
+        raise RuntimeError("Операция заблокирована: " + "; ".join(
+            item.get("message", item.get("code", "unknown")) for item in plan["blockers"]
+        ))
+
+    token = secrets.token_urlsafe(24)
+    now = time.monotonic()
+    entry = {
+        "created_at": now,
+        "expires_at": now + TOKEN_TTL_SECONDS,
+        "request": {
+            "action": plan["action"],
+            "slot": plan["target_slot"],
+            "material": plan["material"],
+            "temperature": plan["temperature"],
+        },
+        "gcode_preview": plan["gcode_preview"],
+        "active_slot": plan["active_slot"],
+        "target_presence": plan["target_slot_state"].get("filament_present"),
+    }
+    with _token_lock:
+        _purge_expired_tokens()
+        _pending_tokens.clear()
+        _pending_tokens[token] = entry
+
+    core.event_log(
+        "info", "ifs_operation_prepared", "Операция IFS подготовлена",
+        action=plan["action"], target_slot=plan["target_slot"],
+        gcode=plan["gcode_preview"], expires_in=TOKEN_TTL_SECONDS,
+    )
+    return {
+        "prepared": True,
+        "executed": False,
+        "token": token,
+        "expires_in_seconds": TOKEN_TTL_SECONDS,
+        "confirmation_phrase": CONFIRMATION_PHRASE,
+        "plan": plan,
+    }
+
+
+def _submit_gcode(script):
+    url = core.MOONRAKER + "/printer/gcode/script"
+    request = urllib.request.Request(
+        url,
+        data=json.dumps({"script": script}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=max(float(core.HTTP_TIMEOUT), 10.0)) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict) or "error" in payload:
+        raise RuntimeError(f"Moonraker отклонил G-code: {payload}")
+    return payload
+
+
+def execute_operation(body):
+    token = str(body.get("token") or "").strip()
+    confirmation = str(body.get("confirmation") or "").strip()
+    if not token:
+        raise ValueError("Не указан одноразовый token")
+    if confirmation != CONFIRMATION_PHRASE:
+        raise ValueError("Неверная строка подтверждения")
+
+    with _execution_lock:
+        with _token_lock:
+            _purge_expired_tokens()
+            entry = _pending_tokens.pop(token, None)
+        if entry is None:
+            raise RuntimeError("Токен отсутствует, уже использован или истёк")
+
+        plan = operation_plan(**entry["request"])
+        if not plan["plan_executable"]:
+            raise RuntimeError("Состояние изменилось, операция теперь заблокирована")
+        if plan["active_slot"] != entry["active_slot"]:
+            raise RuntimeError("Активный слот изменился после подготовки операции")
+        if plan["gcode_preview"] != entry["gcode_preview"]:
+            raise RuntimeError("План операции изменился после подготовки")
+        if plan["target_slot_state"].get("filament_present") != entry["target_presence"]:
+            raise RuntimeError("Состояние датчика целевого слота изменилось")
+
+        response = _submit_gcode(plan["gcode_preview"])
+        core.event_log(
+            "warning", "ifs_operation_submitted", "Команда IFS отправлена в Moonraker",
+            action=plan["action"], target_slot=plan["target_slot"],
+            gcode=plan["gcode_preview"],
+        )
+        return {
+            "accepted": True,
+            "executed": True,
+            "submitted_at": core.timestamp_now(),
+            "gcode": plan["gcode_preview"],
+            "plan": plan,
+            "moonraker": response,
+            "note": "Moonraker принял команду; механическая операция выполняется асинхронно",
+        }
 
 
 class PlannerRuntimeHandler(_BaseHandler):
@@ -265,6 +405,30 @@ class PlannerRuntimeHandler(_BaseHandler):
                 self.send_json(500, {"error": str(exc), "gcode_executed": False})
             return
         super().do_GET()
+
+    def do_POST(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if path == "/api/ifs/control/prepare":
+            try:
+                self.send_json(200, prepare_operation(self.read_json()))
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc), "gcode_executed": False})
+            except RuntimeError as exc:
+                self.send_json(409, {"error": str(exc), "gcode_executed": False})
+            except Exception as exc:
+                self.send_json(500, {"error": str(exc), "gcode_executed": False})
+            return
+        if path == "/api/ifs/control/execute":
+            try:
+                self.send_json(202, execute_operation(self.read_json()))
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc), "gcode_executed": False})
+            except RuntimeError as exc:
+                self.send_json(409, {"error": str(exc), "gcode_executed": False})
+            except Exception as exc:
+                self.send_json(500, {"error": str(exc), "gcode_executed": False})
+            return
+        super().do_POST()
 
 
 runtime.RUNTIME_VERSION = RUNTIME_VERSION
