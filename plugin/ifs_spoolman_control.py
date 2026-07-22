@@ -3,8 +3,9 @@
 
 This phase deliberately does not execute G-code and does not expose write
 endpoints. It reports printer activity, extruder state, active IFS slot,
-registered macro candidates and explicit blockers so the real control contract
-can be designed from observed Z-Mod capabilities instead of assumptions.
+registered macro candidates, filtered macro definitions and explicit blockers
+so the real control contract can be designed from observed Z-Mod capabilities
+instead of assumptions.
 """
 
 import urllib.parse
@@ -16,7 +17,7 @@ import ifs_spoolman_ui as ui
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.8.11-beta"
+RUNTIME_VERSION = "0.8.12-beta"
 _BaseHandler = core.Handler
 
 CONTROL_MACRO_CANDIDATES = (
@@ -29,6 +30,20 @@ CONTROL_MACRO_CANDIDATES = (
     "gcode_macro IFS_CHANGE",
     "gcode_macro SET_CURRENT_PRUTOK",
     "gcode_macro COLOR",
+)
+
+RELATED_MACRO_TOKENS = (
+    "filament",
+    "prutok",
+    "ifs",
+    "load",
+    "unload",
+    "change",
+    "color",
+    "purge",
+    "insert",
+    "remove",
+    "cut",
 )
 
 
@@ -67,6 +82,20 @@ def _query_runtime_objects():
     return status if isinstance(status, dict) else {}
 
 
+def _query_configfile_settings():
+    result = _moonraker_result("/printer/objects/query?configfile=settings")
+    status = result.get("status", {})
+    if not isinstance(status, dict):
+        raise RuntimeError("Klipper не вернул status объекта configfile")
+    configfile = status.get("configfile", {})
+    if not isinstance(configfile, dict):
+        raise RuntimeError("Klipper не вернул объект configfile")
+    settings = configfile.get("settings", {})
+    if not isinstance(settings, dict):
+        raise RuntimeError("Klipper не вернул configfile.settings")
+    return settings
+
+
 def _active_slot_snapshot():
     snapshot = core.state_snapshot()
     slot = snapshot.get("confirmed_active_slot")
@@ -78,21 +107,92 @@ def _active_slot_snapshot():
         return None
 
 
+def _is_related_macro(name):
+    lowered = str(name).lower()
+    return lowered.startswith("gcode_macro ") and any(
+        token in lowered for token in RELATED_MACRO_TOKENS
+    )
+
+
 def _macro_report(objects):
     object_set = set(objects)
     found = [name for name in CONTROL_MACRO_CANDIDATES if name in object_set]
-    related = [
-        name for name in objects
-        if name.startswith("gcode_macro ")
-        and any(token in name.lower() for token in (
-            "filament", "prutok", "ifs", "load", "unload", "change", "color"
-        ))
-    ]
+    related = [name for name in objects if _is_related_macro(name)]
     return {
         "known_candidates": list(CONTROL_MACRO_CANDIDATES),
         "found_candidates": found,
         "related_registered_macros": related,
         "required_contract_selected": False,
+    }
+
+
+def _normalize_macro_section(name, raw):
+    if not isinstance(raw, dict):
+        return {
+            "name": name,
+            "available": True,
+            "settings": {},
+            "gcode": None,
+        }
+
+    gcode = raw.get("gcode")
+    if gcode is not None:
+        gcode = str(gcode)
+
+    settings = {}
+    for key, value in raw.items():
+        if key == "gcode":
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            settings[str(key)] = value
+        else:
+            settings[str(key)] = str(value)
+
+    return {
+        "name": name,
+        "available": True,
+        "settings": settings,
+        "gcode": gcode,
+    }
+
+
+def macro_contract_discovery():
+    checked_at = core.timestamp_now()
+    objects = _registered_objects()
+    settings = _query_configfile_settings()
+
+    registered = [name for name in objects if _is_related_macro(name)]
+    candidate_names = sorted(set(CONTROL_MACRO_CANDIDATES).union(registered))
+    definitions = []
+    missing = []
+
+    for object_name in candidate_names:
+        section_name = object_name.lower()
+        raw = settings.get(section_name)
+        if raw is None:
+            raw = settings.get(object_name)
+        if raw is None:
+            missing.append(object_name)
+            continue
+        definitions.append(_normalize_macro_section(object_name, raw))
+
+    return {
+        "phase": "macro-contract-discovery",
+        "version": RUNTIME_VERSION,
+        "checked_at": checked_at,
+        "read_only": True,
+        "control_enabled": False,
+        "write_endpoints_enabled": False,
+        "gcode_executed": False,
+        "candidate_count": len(candidate_names),
+        "definition_count": len(definitions),
+        "registered_related_macros": registered,
+        "definitions": definitions,
+        "missing_from_configfile_settings": missing,
+        "contract_selected": False,
+        "note": (
+            "Определения получены только для анализа. Ни один макрос не выполнен."
+        ),
     }
 
 
@@ -185,6 +285,7 @@ def control_readiness():
         "gcode_executed": False,
         "ready_for_commands": False,
         "moonraker_available": moonraker_available,
+        "macro_contract_endpoint": "/api/ifs/control/macro-contract",
         "printer": {
             "state": print_state,
             "printing_or_paused": printing,
@@ -228,6 +329,20 @@ class ControlRuntimeHandler(_BaseHandler):
                     "write_endpoints_enabled": False,
                     "gcode_executed": False,
                     "ready_for_commands": False,
+                    "error": str(exc),
+                })
+            return
+        if path == "/api/ifs/control/macro-contract":
+            try:
+                self.send_json(200, macro_contract_discovery())
+            except Exception as exc:
+                self.send_json(500, {
+                    "phase": "macro-contract-discovery",
+                    "read_only": True,
+                    "control_enabled": False,
+                    "write_endpoints_enabled": False,
+                    "gcode_executed": False,
+                    "contract_selected": False,
                     "error": str(exc),
                 })
             return
