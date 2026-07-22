@@ -1,0 +1,73 @@
+diff --git a/plugin/ifs_spoolman_planner.py b/plugin/ifs_spoolman_planner.py
+--- a/plugin/ifs_spoolman_planner.py
++++ b/plugin/ifs_spoolman_planner.py
+@@
+ import copy
+ import json
++import os
+ import secrets
+@@
+-RUNTIME_VERSION = "0.8.15-beta"
++RUNTIME_VERSION = "0.8.16-beta"
+@@
+ _token_lock = threading.RLock()
+ _pending_tokens = {}
++_PENDING_STATE_FILE = "/usr/data/config/mod_data/ifs_spoolman/pending_operation.json"
+@@
+ def _purge_expired_tokens():
+@@
+     for token in expired:
+         _pending_tokens.pop(token, None)
++
++
++def _save_pending_operation(token, entry):
++    os.makedirs(os.path.dirname(_PENDING_STATE_FILE), exist_ok=True)
++    payload = dict(entry)
++    payload["token"] = token
++    with open(_PENDING_STATE_FILE, "w", encoding="utf-8") as fh:
++        json.dump(payload, fh, ensure_ascii=False, indent=2)
++
++
++def _load_pending_operation(token):
++    try:
++        with open(_PENDING_STATE_FILE, "r", encoding="utf-8") as fh:
++            payload = json.load(fh)
++    except (OSError, json.JSONDecodeError):
++        return None
++    if payload.get("token") != token:
++        return None
++    return payload
++
++
++def _clear_pending_operation():
++    try:
++        os.remove(_PENDING_STATE_FILE)
++    except FileNotFoundError:
++        pass
+@@
+     with _token_lock:
+         _purge_expired_tokens()
+         _pending_tokens.clear()
+         _pending_tokens[token] = entry
++        _save_pending_operation(token, entry)
+@@
+-    with _token_lock:
+-        _purge_expired_tokens()
+-        entry = _pending_tokens.pop(token, None)
++    with _token_lock:
++        _purge_expired_tokens()
++        entry = _load_pending_operation(token) or _pending_tokens.pop(token, None)
+     if entry is None:
+-        raise RuntimeError("Токен отсутствует, уже использован или истёк")
++        raise RuntimeError("prepared_operation_not_found: токен отсутствует, уже использован или истёк")
+@@
+     worker.start()
++
++    with _token_lock:
++        _clear_pending_operation()
+@@
+-                self.send_json(409, {"error": str(exc), "gcode_executed": False})
++                self.send_json(409, {"error": {"code": "prepare_failed", "message": str(exc)}, "gcode_executed": False})
+@@
+-                self.send_json(409, {"error": str(exc), "gcode_executed": False})
++                self.send_json(409, {"error": {"code": "execute_failed", "message": str(exc)}, "gcode_executed": False})
