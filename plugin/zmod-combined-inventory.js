@@ -33,21 +33,16 @@
     const style = document.createElement("style");
     style.id = "combined-inventory-styles";
     style.textContent = `
-      .combined-inventory{margin-top:16px;padding-top:14px;border-top:1px solid rgba(148,163,184,.16)}
-      .combined-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;color:#9eabc4;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
-      .combined-badge{padding:4px 7px;border:1px solid rgba(91,140,255,.28);border-radius:999px;background:rgba(91,140,255,.09);color:#8fb0ff;font-size:10px;letter-spacing:0;text-transform:none}
-      .combined-card{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;padding:11px;border:1px solid rgba(148,163,184,.16);border-radius:12px;background:rgba(26,35,56,.62)}
-      .combined-swatch{width:44px;height:44px;border:5px solid rgba(255,255,255,.14);border-radius:50%;background:#64748b;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
-      .combined-name{font-size:13px;font-weight:800;line-height:1.25;overflow-wrap:anywhere}
-      .combined-vendor{margin-top:2px;color:#9eabc4;font-size:11px}
-      .combined-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
-      .combined-pill{padding:3px 6px;border:1px solid rgba(148,163,184,.16);border-radius:999px;color:#b9c4d9;font-size:10px}
-      .combined-weight{margin-top:8px;color:#cdd6e7;font-size:11px}
-      .combined-progress{height:5px;margin-top:5px;overflow:hidden;border-radius:999px;background:rgba(148,163,184,.16)}
-      .combined-progress>span{display:block;height:100%;border-radius:inherit;background:#5b8cff}
-      .combined-empty,.combined-offline{padding:10px 11px;border:1px dashed rgba(148,163,184,.20);border-radius:11px;color:#9eabc4;font-size:11px;line-height:1.45}
-      .combined-warning{margin-top:8px;color:#f5c451;font-size:10px;font-weight:700}
-      @media(max-width:760px){.combined-card{grid-template-columns:38px minmax(0,1fr)}.combined-swatch{width:38px;height:38px}}
+      .combined-inventory{margin-top:7px;padding-top:7px;border-top:1px solid rgba(148,163,184,.14)}
+      .combined-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;color:#9eabc4;font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+      .combined-badge{padding:2px 6px;border:1px solid rgba(91,140,255,.28);border-radius:999px;background:rgba(91,140,255,.09);color:#8fb0ff;font-size:8px;letter-spacing:0;text-transform:none}
+      .combined-card{display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px;padding:7px 8px;border:1px solid rgba(148,163,184,.16);border-radius:9px;background:rgba(26,35,56,.62)}
+      .combined-swatch{width:34px;height:34px;border:4px solid rgba(255,255,255,.14);border-radius:50%;background:#64748b;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
+      .combined-main{min-width:0}.combined-topline{display:flex;align-items:baseline;gap:7px;min-width:0}.combined-name{font-size:11px;font-weight:800;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.combined-vendor{flex:0 0 auto;color:#9eabc4;font-size:9px}
+      .combined-detail{display:flex;align-items:center;gap:6px;min-width:0;margin-top:3px}.combined-meta{display:flex;gap:4px;flex:0 0 auto}.combined-pill{padding:1px 5px;border:1px solid rgba(148,163,184,.16);border-radius:999px;color:#b9c4d9;font-size:8px}.combined-weight{min-width:0;color:#cdd6e7;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .combined-progress{height:3px;margin-top:4px;overflow:hidden;border-radius:999px;background:rgba(148,163,184,.16)}.combined-progress>span{display:block;height:100%;border-radius:inherit;background:#5b8cff}
+      .combined-empty,.combined-offline{padding:7px 8px;border:1px dashed rgba(148,163,184,.20);border-radius:9px;color:#9eabc4;font-size:9px;line-height:1.35}.combined-warning{margin-top:3px;color:#f5c451;font-size:8px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      @media(max-width:760px){.combined-card{grid-template-columns:30px minmax(0,1fr)}.combined-swatch{width:30px;height:30px}.combined-detail{flex-wrap:wrap}}
     `;
     document.head.appendChild(style);
   }
@@ -83,14 +78,9 @@
       body = `
         <div class="combined-card">
           <div class="combined-swatch" style="background:${esc(color)}"></div>
-          <div>
-            <div class="combined-name">${esc(inventory.name || `Катушка #${inventory.spool_id}`)}</div>
-            <div class="combined-vendor">${esc(inventory.vendor || "Без производителя")}</div>
-            <div class="combined-meta">
-              <span class="combined-pill">ID ${esc(inventory.spool_id)}</span>
-              <span class="combined-pill">${esc(inventory.material || "Материал не указан")}</span>
-            </div>
-            <div class="combined-weight">Остаток: ${formatWeight(remaining)} / ${formatWeight(initial)}${percent === null ? "" : ` · ${Math.round(percent)}%`}</div>
+          <div class="combined-main">
+            <div class="combined-topline"><div class="combined-name">${esc(inventory.name || `Катушка #${inventory.spool_id}`)}</div><div class="combined-vendor">${esc(inventory.vendor || "Без производителя")}</div></div>
+            <div class="combined-detail"><div class="combined-meta"><span class="combined-pill">ID ${esc(inventory.spool_id)}</span><span class="combined-pill">${esc(inventory.material || "Материал не указан")}</span></div><div class="combined-weight">Остаток: ${formatWeight(remaining)} / ${formatWeight(initial)}${percent === null ? "" : ` · ${Math.round(percent)}%`}</div></div>
             ${percent === null ? "" : `<div class="combined-progress"><span style="width:${percent.toFixed(1)}%"></span></div>`}
             ${slotData.mismatch ? `<div class="combined-warning">Локальные параметры слота отличаются от данных Spoolman</div>` : ""}
           </div>
