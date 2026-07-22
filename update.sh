@@ -13,7 +13,7 @@ case "${1:-}" in
     *) echo "Unknown argument: $1"; exit 2 ;;
 esac
 
-PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ifs_spoolman_writer.py ifs_spoolman_ui.py ifs_spoolman_local.py zmod-filaments.html zmod-filaments-live.js zmod-inventory-provider.js ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js ifs-spoolman-controls.js"
+PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ifs_spoolman_writer.py ifs_spoolman_ui.py ifs_spoolman_local.py zmod-filaments.html zmod-filaments-live.js zmod-inventory-provider.js zmod-combined-inventory.js ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js ifs-spoolman-controls.js"
 SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh"
 
 for FILE in $PLUGIN_FILES; do [ -f "$REPO_DIR/plugin/$FILE" ] || { echo "Missing plugin/$FILE"; exit 1; }; done
@@ -57,11 +57,17 @@ fi
 chmod +x "$TARGET_DIR"/*.sh
 if ! "$TARGET_DIR/start.sh"; then rollback; exit 1; fi
 sleep 3
-if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then rollback; exit 1; fi
-if ! wget -qO- http://127.0.0.1:7913/manager >/dev/null 2>&1; then rollback; exit 1; fi
-if ! wget -qO- http://127.0.0.1:7913/zmod-filaments-live.js >/dev/null 2>&1; then rollback; exit 1; fi
-if ! wget -qO- http://127.0.0.1:7913/zmod-inventory-provider.js >/dev/null 2>&1; then rollback; exit 1; fi
-if ! wget -qO- http://127.0.0.1:7913/api/inventory/local >/dev/null 2>&1; then rollback; exit 1; fi
+for URL in \
+    http://127.0.0.1:7913/api/health \
+    http://127.0.0.1:7913/manager \
+    http://127.0.0.1:7913/zmod-filaments-live.js \
+    http://127.0.0.1:7913/zmod-inventory-provider.js \
+    http://127.0.0.1:7913/zmod-combined-inventory.js \
+    http://127.0.0.1:7913/api/inventory/local \
+    http://127.0.0.1:7913/api/inventory/combined
+do
+    if ! wget -qO- "$URL" >/dev/null 2>&1; then rollback; exit 1; fi
+done
 
 echo "$APP_NAME updated."
 echo "Backup: $BACKUP_DIR"
