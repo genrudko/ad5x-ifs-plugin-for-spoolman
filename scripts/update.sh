@@ -22,6 +22,7 @@ ifs_spoolman_local.py
 zmod-filaments.html
 zmod-filaments-live.js
 zmod-inventory-provider.js
+zmod-combined-inventory.js
 ui_v0_2.html
 ifs-spoolman-card.js
 ifs-spoolman-layout.js
@@ -77,11 +78,17 @@ fi
 chmod +x "$TARGET_DIR"/*.sh
 if ! "$TARGET_DIR/start.sh"; then rollback; exit 1; fi
 sleep 3
-if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then rollback; exit 1; fi
-if ! wget -qO- http://127.0.0.1:7913/manager >/dev/null 2>&1; then rollback; exit 1; fi
-if ! wget -qO- http://127.0.0.1:7913/zmod-filaments-live.js >/dev/null 2>&1; then rollback; exit 1; fi
-if ! wget -qO- http://127.0.0.1:7913/zmod-inventory-provider.js >/dev/null 2>&1; then rollback; exit 1; fi
-if ! wget -qO- http://127.0.0.1:7913/api/inventory/local >/dev/null 2>&1; then rollback; exit 1; fi
+for URL in \
+    http://127.0.0.1:7913/api/health \
+    http://127.0.0.1:7913/manager \
+    http://127.0.0.1:7913/zmod-filaments-live.js \
+    http://127.0.0.1:7913/zmod-inventory-provider.js \
+    http://127.0.0.1:7913/zmod-combined-inventory.js \
+    http://127.0.0.1:7913/api/inventory/local \
+    http://127.0.0.1:7913/api/inventory/combined
+do
+    if ! wget -qO- "$URL" >/dev/null 2>&1; then rollback; exit 1; fi
+done
 
 echo "$APP_NAME обновлён."
 echo "Backup: $BACKUP_DIR"
