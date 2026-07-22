@@ -28,7 +28,7 @@ download_file() {
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Manager — provider selector UI ==="
+echo "=== AD5X IFS Manager — combined local + Spoolman view ==="
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
 if ! wget -qO- "$MOONRAKER_URL/server/info" >/dev/null 2>&1; then
@@ -60,6 +60,7 @@ for FILE in \
     plugin/zmod-filaments.html \
     plugin/zmod-filaments-live.js \
     plugin/zmod-inventory-provider.js \
+    plugin/zmod-combined-inventory.js \
     plugin/ui_v0_2.html \
     plugin/ifs-spoolman-card.js \
     plugin/ifs-spoolman-layout.js \
@@ -102,5 +103,5 @@ echo "=== $RESULT_TEXT ==="
 echo "Ветка разработки: $REF"
 echo "Версия: $(cat "$TARGET_DIR/VERSION")"
 echo "Провайдеры учёта: auto, local, spoolman, none."
-echo "Выбор провайдера доступен в менеджере."
+echo "Комбинированное отображение локальных данных и Spoolman доступно в менеджере."
 echo "Менеджер: http://IP_ПРИНТЕРА:7913/manager"
