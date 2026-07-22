@@ -83,6 +83,7 @@ for URL in \
     http://127.0.0.1:7913/api/inventory/combined \
     http://127.0.0.1:7913/api/ifs/control/readiness \
     http://127.0.0.1:7913/api/ifs/control/contract \
+    http://127.0.0.1:7913/api/ifs/control/operation \
     "http://127.0.0.1:7913/api/ifs/control/plan?action=unload"
 do
     if ! check_url "$URL"; then rollback; exit 1; fi
