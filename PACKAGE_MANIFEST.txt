@@ -1,5 +1,5 @@
 # AD5X IFS Manager
-# Runtime/package manifest for 0.8.5-beta
+# Runtime/package manifest for 0.8.6-beta
 
 ifs_spoolman.py
 ifs_spoolman_runtime.py
