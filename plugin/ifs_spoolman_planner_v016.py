@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Persistent two-phase execution layer for AD5X IFS control.
+"""Guarded two-phase execution layer for AD5X IFS control.
 
-This runtime wraps the validated planner from 0.8.15-beta and fixes the
-prepare -> execute lifecycle by persisting the prepared operation on disk.
-It also returns structured API errors and exposes validated contract state
-through readiness.
+Prepared plan metadata is persisted for diagnostics, but the executable token is
+kept only in process memory.  A service restart therefore invalidates every
+prepared physical operation instead of allowing an old token to execute later.
 """
 
 import copy
@@ -27,12 +26,15 @@ import ifs_spoolman_writer as writer
 
 RUNTIME_VERSION = "0.8.16-beta"
 _BaseHandler = planner.PlannerRuntimeHandler
-STATE_SCHEMA = "ifs-pending-operation-v1"
+STATE_SCHEMA = "ifs-pending-operation-v2"
 PENDING_STATE_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "pending_operation.json",
 )
 _pending_state_lock = threading.RLock()
+_pending_token_lock = threading.RLock()
+_pending_tokens = {}
+planner.TOKEN_TTL_SECONDS = 300
 
 
 class ControlApiError(Exception):
@@ -71,12 +73,21 @@ def _atomic_write_json(path, payload):
     os.replace(temp_path, path)
 
 
-def _clear_pending_state():
+def _clear_pending_token(operation_id=None):
+    with _pending_token_lock:
+        if operation_id is None:
+            _pending_tokens.clear()
+        else:
+            _pending_tokens.pop(str(operation_id), None)
+
+
+def _clear_pending_state(operation_id=None):
     with _pending_state_lock:
         try:
             os.remove(PENDING_STATE_PATH)
         except FileNotFoundError:
             pass
+    _clear_pending_token(operation_id)
 
 
 def _load_pending_state():
@@ -141,6 +152,11 @@ def _pending_expired(state):
         return float(state.get("expires_at_epoch")) <= time.time()
     except (TypeError, ValueError):
         return True
+
+
+def _token_for_operation(operation_id):
+    with _pending_token_lock:
+        return _pending_tokens.get(str(operation_id))
 
 
 def _validated_contract_available(readiness):
@@ -221,7 +237,6 @@ def prepare_operation(body):
         "version": RUNTIME_VERSION,
         "status": "prepared",
         "operation_id": operation_id,
-        "token": token,
         "created_at": core.timestamp_now(),
         "created_at_epoch": now_epoch,
         "expires_at_epoch": now_epoch + planner.TOKEN_TTL_SECONDS,
@@ -235,13 +250,18 @@ def prepare_operation(body):
         "target_presence": identity["target_presence"],
         "gcode_preview": plan["gcode_preview"],
         "plan_hash": _canonical_hash(identity),
+        "token_persistence": "memory_only",
+        "tokens_survive_restart": False,
     }
+    with _pending_token_lock:
+        _pending_tokens.clear()
+        _pending_tokens[operation_id] = token
     _save_pending_state(state)
 
     core.event_log(
         "info",
-        "ifs_operation_prepared_persistent",
-        "Операция IFS подготовлена и сохранена",
+        "ifs_operation_prepared_guarded",
+        "Операция IFS подготовлена; token сохранён только в памяти",
         operation_id=operation_id,
         action=plan["action"],
         target_slot=plan["target_slot"],
@@ -256,6 +276,8 @@ def prepare_operation(body):
         "expires_in_seconds": planner.TOKEN_TTL_SECONDS,
         "confirmation_phrase": planner.CONFIRMATION_PHRASE,
         "persistent_state": True,
+        "token_persistence": "memory_only",
+        "tokens_survive_restart": False,
         "plan": plan,
     }
 
@@ -268,15 +290,23 @@ def _validated_pending_state(token):
             "Подготовленная операция отсутствует или уже использована",
             status=409,
         )
+    operation_id = str(state.get("operation_id") or "")
     if _pending_expired(state):
-        _clear_pending_state()
+        _clear_pending_state(operation_id)
         raise ControlApiError(
             "prepared_operation_expired",
             "Срок действия подготовленной операции истёк",
             status=409,
         )
-    expected = str(state.get("token") or "")
-    if not expected or not secrets.compare_digest(expected, token):
+    expected = _token_for_operation(operation_id)
+    if not expected:
+        _clear_pending_state(operation_id)
+        raise ControlApiError(
+            "prepared_operation_restart_invalidated",
+            "Подготовленная операция аннулирована перезапуском сервиса",
+            status=409,
+        )
+    if not secrets.compare_digest(expected, token):
         raise ControlApiError(
             "token_mismatch",
             "Одноразовый токен не соответствует подготовленной операции",
@@ -385,11 +415,11 @@ def execute_operation(body):
             })
         raise
 
-    _clear_pending_state()
+    _clear_pending_state(operation_id)
     core.event_log(
         "warning",
-        "ifs_operation_queued_persistent",
-        "Сохранённая операция IFS поставлена в фоновое выполнение",
+        "ifs_operation_queued_guarded",
+        "Подготовленная операция IFS поставлена в фоновое выполнение",
         operation_id=operation_id,
         action=plan["action"],
         target_slot=plan["target_slot"],
@@ -404,6 +434,7 @@ def execute_operation(body):
         "status_endpoint": "/api/ifs/control/operation",
         "gcode": plan["gcode_preview"],
         "persistent_state_consumed": True,
+        "token_persistence": "memory_only",
         "note": "Операция поставлена в фоновый worker; проверяйте status_endpoint",
     }
 
@@ -412,6 +443,8 @@ def operation_snapshot():
     payload = planner._operation_snapshot()
     if payload.get("status") in {"queued", "submitting", "running", "completed", "failed"}:
         payload["persistent_prepare_state"] = False
+        payload["token_persistence"] = "memory_only"
+        payload["tokens_survive_restart"] = False
         return payload
 
     try:
@@ -422,18 +455,31 @@ def operation_snapshot():
 
     if state is None:
         payload["persistent_prepare_state"] = False
+        payload["token_persistence"] = "memory_only"
+        payload["tokens_survive_restart"] = False
         return payload
+    operation_id = str(state.get("operation_id") or "")
     if _pending_expired(state):
-        _clear_pending_state()
+        _clear_pending_state(operation_id)
         payload["persistent_prepare_state"] = False
         payload["pending_error"] = {
             "code": "prepared_operation_expired",
             "message": "Срок действия подготовленной операции истёк",
         }
         return payload
+    if not _token_for_operation(operation_id):
+        _clear_pending_state(operation_id)
+        payload["persistent_prepare_state"] = False
+        payload["pending_error"] = {
+            "code": "prepared_operation_restart_invalidated",
+            "message": "Подготовленная операция аннулирована перезапуском сервиса",
+        }
+        payload["token_persistence"] = "memory_only"
+        payload["tokens_survive_restart"] = False
+        return payload
 
     payload.update({
-        "operation_id": state.get("operation_id"),
+        "operation_id": operation_id,
         "status": "prepared",
         "accepted": False,
         "created_at": state.get("created_at"),
@@ -444,6 +490,12 @@ def operation_snapshot():
         "gcode": state.get("gcode_preview"),
         "persistent_prepare_state": True,
         "expires_at_epoch": state.get("expires_at_epoch"),
+        "expires_in_seconds": max(
+            0,
+            int(float(state.get("expires_at_epoch", 0)) - time.time()),
+        ),
+        "token_persistence": "memory_only",
+        "tokens_survive_restart": False,
     })
     return payload
 
