@@ -333,7 +333,11 @@
 
   function start() {
     injectStyles();
-    const observer = new MutationObserver(() => renderPanel());
+    const observer = new MutationObserver(() => {
+      if (!document.querySelector(`#${CARD_ID} #${PANEL_ID}`)) {
+        renderPanel();
+      }
+    });
     observer.observe(document.body, { childList: true, subtree: true });
     document.addEventListener("click", event => {
       const manage = event.target && event.target.closest
