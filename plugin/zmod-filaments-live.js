@@ -233,6 +233,9 @@
       const enabled = !busy && (isActive || present === true);
       const label = isActive ? "Выгрузить" : present === true ? `Переключить на IFS ${slot}` : present === false ? "Филамент отсутствует" : "Состояние неизвестно";
       const action = isActive ? "unload" : "switch";
+      const signature = `${action}|${enabled}|${label}`;
+      if (actions.dataset.signature === signature) return;
+      actions.dataset.signature = signature;
       actions.innerHTML = `<button type="button" class="${isActive ? "ifs-control-danger" : "ifs-control-primary"}" ${enabled ? "" : "disabled"}>${escapeHtml(label)}</button>`;
       const button = actions.querySelector("button");
       if (enabled) {
@@ -266,7 +269,11 @@
         </div>
       `;
       document.body.appendChild(modal);
+      const onKey = event => {
+        if (event.key === "Escape") finish(false);
+      };
       const finish = result => {
+        document.removeEventListener("keydown", onKey);
         modal.remove();
         resolve(result);
       };
@@ -275,12 +282,7 @@
         if (button) finish(button.dataset.result === "confirm");
         else if (event.target === modal) finish(false);
       });
-      document.addEventListener("keydown", function onKey(event) {
-        if (event.key === "Escape" && document.getElementById(MODAL_ID)) {
-          document.removeEventListener("keydown", onKey);
-          finish(false);
-        }
-      });
+      document.addEventListener("keydown", onKey);
     });
   }
 
@@ -394,7 +396,7 @@
       injectSlotControls();
     });
     const grid = document.getElementById("grid");
-    if (grid) observer.observe(grid, { childList: true, subtree: true });
+    if (grid) observer.observe(grid, { childList: true, subtree: false });
     refreshOperation(true);
   }
 
