@@ -17,7 +17,7 @@ CARD_TARGET_NAME="ifs-spoolman-card-v10.js"
 LAYOUT_TARGET_NAME="ifs-spoolman-layout-v2.js"
 DASHBOARD_TARGET_NAME="ifs-spoolman-dashboard-v1.js"
 SELECTION_TARGET_NAME="ifs-spoolman-selection-v1.js"
-CONTROLS_TARGET_NAME="ifs-spoolman-controls-v3.js"
+CONTROLS_TARGET_NAME="ifs-spoolman-controls-v4.js"
 
 CARD_TARGET="$FLUIDD_DIR/$CARD_TARGET_NAME"
 LAYOUT_TARGET="$FLUIDD_DIR/$LAYOUT_TARGET_NAME"
