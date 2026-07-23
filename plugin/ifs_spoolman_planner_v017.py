@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Live-telemetry execution layer for AD5X IFS control.
 
-This runtime extends the persistent 0.8.16-beta prepare/execute contract.  The
+This runtime extends the guarded 0.8.16-beta prepare/execute contract. The
 Moonraker G-code request is performed in its own submitter thread while the
 operation worker independently polls printer state, so the status endpoint can
 report heating, filament motion and completion instead of remaining stuck in
@@ -23,7 +23,7 @@ import ifs_spoolman_ui as ui
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.8.18-beta"
+RUNTIME_VERSION = "0.8.18-beta-repair1"
 _BaseHandler = persistent.PersistentPlannerRuntimeHandler
 
 
@@ -171,7 +171,7 @@ def live_operation_worker(operation_id, plan):
                     )
                 elif _submission_timeout(exc):
                     # Moonraker can continue a long macro after the HTTP client
-                    # stops waiting.  Physical-state monitoring remains decisive.
+                    # stops waiting. Physical-state monitoring remains decisive.
                     submission_acceptable = True
                     planner._set_operation(
                         moonraker_request_in_flight=False,
@@ -259,7 +259,7 @@ def live_operation_worker(operation_id, plan):
 
 
 class LiveTelemetryRuntimeHandler(_BaseHandler):
-    """Persistent prepare/execute API with concurrent live telemetry."""
+    """Guarded prepare/execute API with concurrent live telemetry."""
 
 
 planner._operation_worker = live_operation_worker
