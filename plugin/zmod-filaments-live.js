@@ -19,6 +19,8 @@
     pendingToken: null,
     pendingOperationId: null,
     requestRunning: false,
+    refreshQueued: false,
+    refreshQueuedForceAll: false,
     stopped: false,
     dirty: false,
     timer: null,
@@ -118,7 +120,7 @@
 
   function phaseLabel(phase, status) {
     const labels = {
-      dispatching: "Отправка команды",
+      dispatching: "Команда принята",
       waiting_for_macro_activity: "Ожидание начала макроса",
       heating: "Нагрев экструдера",
       filament_change: "Смена филамента",
@@ -130,7 +132,7 @@
     };
     if (labels[phase]) return labels[phase];
     if (status === "prepared") return "Операция подготовлена";
-    if (status === "queued") return "Операция поставлена в очередь";
+    if (status === "queued") return "Команда принята";
     if (status === "running" || status === "submitting") return "Операция выполняется";
     if (status === "completed") return "Операция завершена";
     if (status === "failed") return "Ошибка операции";
@@ -142,6 +144,16 @@
     if (status === "completed") return "completed";
     if (status === "failed") return "failed";
     return "";
+  }
+
+  function moonrakerLabel(operation, status) {
+    if (BUSY_STATUSES.has(status)) {
+      if (operation.moonraker_request_in_flight) return "команда выполняется";
+      if (operation.moonraker_acknowledged) return "подтверждено";
+      return "команда принята";
+    }
+    if (operation.moonraker_acknowledged) return "подтверждено";
+    return "нет активной команды";
   }
 
   function operationSummary() {
@@ -201,7 +213,7 @@
         <div class="ifsctl-box">
           <div class="ifsctl-label">Телеметрия</div>
           <div class="ifsctl-value">${escapeHtml(info.phase)}</div>
-          <div class="ifsctl-meta">Экструдер: ${escapeHtml(info.tempText)} · Moonraker: ${info.operation.moonraker_request_in_flight ? "команда выполняется" : info.operation.moonraker_acknowledged ? "подтверждено" : "ожидание"}</div>
+          <div class="ifsctl-meta">Экструдер: ${escapeHtml(info.tempText)} · Moonraker: ${escapeHtml(moonrakerLabel(info.operation, info.status))}</div>
           ${BUSY_STATUSES.has(info.status) ? '<div class="ifsctl-progress"><span></span></div>' : ""}
           ${error ? `<div class="ifsctl-error">${escapeHtml(error)}</div>` : ""}
         </div>
@@ -253,12 +265,12 @@
       modal.innerHTML = `
         <div class="ifsctl-dialog" role="dialog" aria-modal="true" aria-labelledby="ifsctl-dialog-title">
           <h3 id="ifsctl-dialog-title">${escapeHtml(actionLabel)}</h3>
-          <div class="ifsctl-warning">Принтер выполнит перемещения, нагрев экструдера, подачу или выгрузку филамента и очистку сопла. Убедитесь, что рабочая зона свободна.</div>
+          <div class="ifsctl-warning">Принтер выполнит перемещения, нагрев экструдера, подачу или выгрузку филамента и очистку сопла. Температура выгрузки старого филамента определяется внутренним алгоритмом макроса. Убедитесь, что рабочая зона свободна.</div>
           <dl>
             <dt>Текущий слот</dt><dd>IFS ${escapeHtml(plan.active_slot == null ? "—" : plan.active_slot)}</dd>
             <dt>Целевой слот</dt><dd>${plan.target_slot == null ? "Выгрузка без загрузки" : `IFS ${escapeHtml(plan.target_slot)}`}</dd>
             <dt>Материал</dt><dd>${escapeHtml(plan.material || "—")}</dd>
-            <dt>Температура</dt><dd>${escapeHtml(plan.temperature == null ? "—" : `${plan.temperature} °C`)}</dd>
+            <dt>Температура загрузки</dt><dd>${escapeHtml(plan.temperature == null ? "—" : `${plan.temperature} °C`)}</dd>
             <dt>Макрос</dt><dd>${escapeHtml(plan.macro || "—")}</dd>
           </dl>
           <code>${escapeHtml(plan.gcode_preview || "")}</code>
@@ -286,6 +298,29 @@
     });
   }
 
+  function optimisticQueuedOperation(prepared, accepted) {
+    const plan = prepared.plan || {};
+    return {
+      operation_id: accepted.operation_id || prepared.operation_id || null,
+      status: "queued",
+      accepted: true,
+      gcode_submitted: false,
+      completed: false,
+      failed: false,
+      action: plan.action || null,
+      active_slot_before: plan.active_slot == null ? state.lastActiveSlot : plan.active_slot,
+      target_slot: plan.target_slot == null ? null : plan.target_slot,
+      gcode: accepted.gcode || plan.gcode_preview || null,
+      plan,
+      observed: {},
+      progress_phase: "dispatching",
+      moonraker_request_in_flight: false,
+      moonraker_acknowledged: false,
+      error: null,
+      optimistic: true
+    };
+  }
+
   async function beginOperation(action, slot) {
     if (isBusy()) return;
     state.lastError = null;
@@ -301,11 +336,13 @@
       state.pendingOperationId = prepared.operation_id;
       const confirmed = await showConfirm(prepared.plan || {});
       if (!confirmed) {
+        state.pendingToken = null;
+        state.pendingOperationId = null;
         state.lastError = "Операция подготовлена, но выполнение отменено пользователем";
         renderControlCenter();
         return;
       }
-      await request("/api/ifs/control/execute", {
+      const accepted = await request("/api/ifs/control/execute", {
         method: "POST",
         body: JSON.stringify({
           token: state.pendingToken,
@@ -314,8 +351,16 @@
       });
       state.pendingToken = null;
       state.pendingOperationId = null;
-      await refreshOperation(true);
+      state.operation = optimisticQueuedOperation(prepared, accepted);
+      state.lastOperationStatus = "queued";
+      state.lastError = null;
+      renderControlCenter();
+      injectSlotControls();
+      window.clearTimeout(state.timer);
+      refreshOperation(true);
     } catch (error) {
+      state.pendingToken = null;
+      state.pendingOperationId = null;
       state.lastError = error && error.message ? error.message : String(error);
       renderControlCenter();
       injectSlotControls();
@@ -344,7 +389,12 @@
   }
 
   async function refreshOperation(forceAll = false) {
-    if (state.requestRunning || state.stopped || document.hidden) return;
+    if (state.stopped || document.hidden) return;
+    if (state.requestRunning) {
+      state.refreshQueued = true;
+      state.refreshQueuedForceAll = state.refreshQueuedForceAll || forceAll;
+      return;
+    }
     state.requestRunning = true;
     try {
       const operation = await request("/api/ifs/control/operation");
@@ -378,7 +428,15 @@
       state.requestRunning = false;
       renderControlCenter();
       injectSlotControls();
-      schedule(isBusy() ? BUSY_POLL_MS : IDLE_POLL_MS);
+      if (state.refreshQueued) {
+        const queuedForceAll = state.refreshQueuedForceAll;
+        state.refreshQueued = false;
+        state.refreshQueuedForceAll = false;
+        window.clearTimeout(state.timer);
+        state.timer = window.setTimeout(() => refreshOperation(queuedForceAll), 0);
+      } else {
+        schedule(isBusy() ? BUSY_POLL_MS : IDLE_POLL_MS);
+      }
     }
   }
 
