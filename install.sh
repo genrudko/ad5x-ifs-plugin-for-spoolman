@@ -13,7 +13,7 @@ case "${1:-}" in
     *) echo "Unknown argument: $1"; exit 2 ;;
 esac
 
-PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ifs_spoolman_writer.py ifs_spoolman_ui.py ifs_spoolman_local.py ifs_spoolman_control.py ifs_spoolman_planner.py ifs_spoolman_planner_v016.py zmod-filaments.html zmod-filaments-live.js zmod-inventory-provider.js zmod-combined-inventory.js ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js ifs-spoolman-controls.js"
+PLUGIN_FILES="ifs_spoolman.py ifs_spoolman_runtime.py ifs_spoolman_writer.py ifs_spoolman_ui.py ifs_spoolman_local.py ifs_spoolman_control.py ifs_spoolman_planner.py ifs_spoolman_planner_v016.py ifs_spoolman_planner_v017.py zmod-filaments.html zmod-filaments-live.js zmod-inventory-provider.js zmod-combined-inventory.js ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js ifs-spoolman-controls.js"
 SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh"
 
 for FILE in $PLUGIN_FILES; do
