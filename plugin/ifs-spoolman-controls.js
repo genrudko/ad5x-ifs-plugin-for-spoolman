@@ -18,6 +18,8 @@
     lastOperationStatus: null,
     lastError: null,
     requestRunning: false,
+    refreshQueued: false,
+    refreshQueuedForceAll: false,
     stopped: false,
     timer: null
   };
@@ -130,7 +132,7 @@
 
   function phaseLabel(phase, status) {
     const labels = {
-      dispatching: "Отправка команды",
+      dispatching: "Команда принята",
       waiting_for_macro_activity: "Ожидание макроса",
       heating: "Нагрев",
       filament_change: "Смена филамента",
@@ -142,7 +144,7 @@
     };
     if (labels[phase]) return labels[phase];
     if (status === "prepared") return "Подготовлено";
-    if (status === "queued") return "В очереди";
+    if (status === "queued") return "Команда принята";
     if (status === "running" || status === "submitting") return "Выполняется";
     if (status === "completed") return "Завершено";
     if (status === "failed") return "Ошибка";
@@ -154,6 +156,24 @@
     if (status === "completed") return "completed";
     if (status === "failed") return "failed";
     return "";
+  }
+
+  function moonrakerLabel(operation, status) {
+    if (BUSY_STATUSES.has(status)) {
+      if (operation.moonraker_request_in_flight) return "команда выполняется";
+      if (operation.moonraker_acknowledged) return "подтверждено";
+      return "команда принята";
+    }
+    if (operation.moonraker_acknowledged) return "подтверждено";
+    return "нет активной команды";
+  }
+
+  function stabilizeCardHeader(busy) {
+    if (!busy) return;
+    const badge = document.querySelector(`#${CARD_ID} .ifssm-status`);
+    if (!badge) return;
+    badge.classList.add("connected");
+    badge.textContent = "Операция выполняется";
   }
 
   function ensurePanel() {
@@ -202,12 +222,13 @@
       ? `${operation.action === "unload" ? "Выгрузка" : "Смена"}${operation.active_slot_before != null ? ` · IFS ${operation.active_slot_before}` : ""}${operation.target_slot != null ? ` → IFS ${operation.target_slot}` : ""}`
       : `Выбран IFS ${selected} · активен IFS ${active || "—"}`;
 
+    stabilizeCardHeader(busy);
     panel.innerHTML = `
       <div class="ifsfc-head">
         <div class="ifsfc-title">Управление IFS</div>
         <div class="ifsfc-state ${statusClass(status)}">${escapeHtml(phase)}</div>
       </div>
-      <div class="ifsfc-line"><strong>${escapeHtml(route)}</strong> · Экструдер ${escapeHtml(tempText)}</div>
+      <div class="ifsfc-line"><strong>${escapeHtml(route)}</strong> · Экструдер ${escapeHtml(tempText)} · Moonraker: ${escapeHtml(moonrakerLabel(operation, status))}</div>
       ${busy ? '<div class="ifsfc-progress"><span></span></div>' : ""}
       ${error ? `<div class="ifsfc-error">${escapeHtml(error)}</div>` : ""}
       <div class="ifsfc-actions">
@@ -236,12 +257,12 @@
       modal.innerHTML = `
         <div class="ifsfc-dialog" role="dialog" aria-modal="true" aria-labelledby="ifsfc-title">
           <h3 id="ifsfc-title">${escapeHtml(actionLabel)}</h3>
-          <div class="ifsfc-warning">Принтер выполнит перемещения, нагрев, подачу или выгрузку филамента и очистку сопла. Убедитесь, что рабочая зона свободна.</div>
+          <div class="ifsfc-warning">Принтер выполнит перемещения, нагрев, подачу или выгрузку филамента и очистку сопла. Температура выгрузки старого филамента определяется внутренним алгоритмом макроса. Убедитесь, что рабочая зона свободна.</div>
           <dl>
             <dt>Текущий слот</dt><dd>IFS ${escapeHtml(plan.active_slot == null ? "—" : plan.active_slot)}</dd>
             <dt>Целевой слот</dt><dd>${plan.target_slot == null ? "Выгрузка без загрузки" : `IFS ${escapeHtml(plan.target_slot)}`}</dd>
             <dt>Материал</dt><dd>${escapeHtml(plan.material || "—")}</dd>
-            <dt>Температура</dt><dd>${escapeHtml(plan.temperature == null ? "—" : `${plan.temperature} °C`)}</dd>
+            <dt>Температура загрузки</dt><dd>${escapeHtml(plan.temperature == null ? "—" : `${plan.temperature} °C`)}</dd>
             <dt>Макрос</dt><dd>${escapeHtml(plan.macro || "—")}</dd>
           </dl>
           <code>${escapeHtml(plan.gcode_preview || "")}</code>
@@ -264,6 +285,29 @@
     });
   }
 
+  function optimisticQueuedOperation(prepared, accepted) {
+    const plan = prepared.plan || {};
+    return {
+      operation_id: accepted.operation_id || prepared.operation_id || null,
+      status: "queued",
+      accepted: true,
+      gcode_submitted: false,
+      completed: false,
+      failed: false,
+      action: plan.action || null,
+      active_slot_before: plan.active_slot == null ? activeSlot() : plan.active_slot,
+      target_slot: plan.target_slot == null ? null : plan.target_slot,
+      gcode: accepted.gcode || plan.gcode_preview || null,
+      plan,
+      observed: {},
+      progress_phase: "dispatching",
+      moonraker_request_in_flight: false,
+      moonraker_acknowledged: false,
+      error: null,
+      optimistic: true
+    };
+  }
+
   async function beginOperation(action, slot) {
     if (isBusy()) return;
     state.lastError = null;
@@ -277,11 +321,12 @@
       state.pendingToken = prepared.token;
       const confirmed = await showConfirm(prepared.plan || {});
       if (!confirmed) {
+        state.pendingToken = null;
         state.lastError = "Выполнение отменено пользователем";
         renderPanel();
         return;
       }
-      await request("/api/ifs/control/execute", {
+      const accepted = await request("/api/ifs/control/execute", {
         method: "POST",
         body: JSON.stringify({
           token: state.pendingToken,
@@ -289,15 +334,26 @@
         })
       });
       state.pendingToken = null;
-      await refresh(true);
+      state.operation = optimisticQueuedOperation(prepared, accepted);
+      state.lastOperationStatus = "queued";
+      state.lastError = null;
+      renderPanel();
+      window.clearTimeout(state.timer);
+      refresh(true);
     } catch (error) {
+      state.pendingToken = null;
       state.lastError = error && error.message ? error.message : String(error);
       renderPanel();
     }
   }
 
   async function refresh(forceAll = false) {
-    if (state.requestRunning || state.stopped || document.hidden) return;
+    if (state.stopped || document.hidden) return;
+    if (state.requestRunning) {
+      state.refreshQueued = true;
+      state.refreshQueuedForceAll = state.refreshQueuedForceAll || forceAll;
+      return;
+    }
     state.requestRunning = true;
     try {
       const operation = await request("/api/ifs/control/operation");
@@ -322,7 +378,15 @@
     } finally {
       state.requestRunning = false;
       renderPanel();
-      schedule(isBusy() ? 2000 : 8000);
+      if (state.refreshQueued) {
+        const queuedForceAll = state.refreshQueuedForceAll;
+        state.refreshQueued = false;
+        state.refreshQueuedForceAll = false;
+        window.clearTimeout(state.timer);
+        state.timer = window.setTimeout(() => refresh(queuedForceAll), 0);
+      } else {
+        schedule(isBusy() ? 2000 : 8000);
+      }
     }
   }
 
