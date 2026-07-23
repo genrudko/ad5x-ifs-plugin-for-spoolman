@@ -60,6 +60,7 @@ for FILE in \
     plugin/ifs_spoolman_control.py \
     plugin/ifs_spoolman_planner.py \
     plugin/ifs_spoolman_planner_v016.py \
+    plugin/ifs_spoolman_planner_v017.py \
     plugin/zmod-filaments.html \
     plugin/zmod-filaments-live.js \
     plugin/zmod-inventory-provider.js \
