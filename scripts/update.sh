@@ -22,6 +22,7 @@ ifs_spoolman_local.py
 ifs_spoolman_control.py
 ifs_spoolman_planner.py
 ifs_spoolman_planner_v016.py
+ifs_spoolman_planner_v017.py
 zmod-filaments.html
 zmod-filaments-live.js
 zmod-inventory-provider.js
