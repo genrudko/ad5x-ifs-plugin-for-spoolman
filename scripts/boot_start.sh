@@ -6,7 +6,7 @@ APP_DIR="/opt/config/mod_data/ifs_spoolman"
 PID_FILE="$APP_DIR/ifs_spoolman.pid"
 LOG_FILE="$APP_DIR/ifs_spoolman.log"
 PYTHON="/root/moonraker-env/bin/python3"
-PROGRAM="$APP_DIR/ifs_spoolman_planner_v016.py"
+PROGRAM="$APP_DIR/ifs_spoolman_planner_v017.py"
 
 if [ -x "$APP_DIR/install_fluidd_card.sh" ]; then
     "$APP_DIR/install_fluidd_card.sh" \
