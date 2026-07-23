@@ -23,7 +23,7 @@ import ifs_spoolman_ui as ui
 import ifs_spoolman_writer as writer
 
 
-RUNTIME_VERSION = "0.8.17-beta"
+RUNTIME_VERSION = "0.8.18-beta"
 _BaseHandler = persistent.PersistentPlannerRuntimeHandler
 
 
