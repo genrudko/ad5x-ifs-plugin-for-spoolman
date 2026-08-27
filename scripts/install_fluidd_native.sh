@@ -62,18 +62,30 @@ clean_legacy_dir() {
             "$CLEAN_INDEX"
     then
         CLEAN_TMP="$CLEAN_INDEX.ifs-native-clean.$$"
-        CLEAN_MODE="$(stat -c '%a' "$CLEAN_INDEX")"
+        CLEAN_BODY="$CLEAN_TMP.body"
+
+        # BusyBox on AD5X does not necessarily provide stat. Copy the original
+        # first so mode/ownership are retained, then replace only its contents.
+        if ! cp -p "$CLEAN_INDEX" "$CLEAN_TMP"; then
+            rm -f "$CLEAN_TMP" "$CLEAN_BODY"
+            return 1
+        fi
 
         if ! awk '
             /<script/ && /ifs-spoolman-(card|layout|visibility|dashboard|selection|controls)/ { next }
             { print }
-        ' "$CLEAN_INDEX" >"$CLEAN_TMP"
+        ' "$CLEAN_INDEX" >"$CLEAN_BODY"
         then
-            rm -f "$CLEAN_TMP"
+            rm -f "$CLEAN_TMP" "$CLEAN_BODY"
             return 1
         fi
 
-        chmod "$CLEAN_MODE" "$CLEAN_TMP"
+        if ! cat "$CLEAN_BODY" >"$CLEAN_TMP"; then
+            rm -f "$CLEAN_TMP" "$CLEAN_BODY"
+            return 1
+        fi
+
+        rm -f "$CLEAN_BODY"
         mv "$CLEAN_TMP" "$CLEAN_INDEX"
     fi
 
@@ -90,7 +102,7 @@ clean_legacy_dir() {
 
 [ "$(id -u)" = "0" ] || fail "run this script over SSH as root"
 
-for CMD in wget sha256sum unzip grep mv rm mkdir cat awk stat chmod; do
+for CMD in wget sha256sum unzip grep mv rm mkdir cat awk cp; do
     command -v "$CMD" >/dev/null 2>&1 || fail "required host command not found: $CMD"
 done
 
