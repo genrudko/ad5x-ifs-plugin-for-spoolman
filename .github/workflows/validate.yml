@@ -26,10 +26,11 @@ jobs:
         run: |
           python3 -m json.tool examples/config.example.json >/dev/null
           python3 -m json.tool examples/assignments.example.json >/dev/null
+          python3 -m json.tool native-fluidd/config.json >/dev/null
 
       - name: Validate standalone release invariants
         run: |
-          test "$(cat VERSION)" = "0.6.4-beta"
+          test "$(cat VERSION)" = "0.6.5-beta"
           grep -F 'APP_VERSION = "0.5.1-beta"' plugin/ifs_spoolman.py
           grep -F 'server_version="IFS-Spoolman/0.5.1-beta"' plugin/ifs_spoolman.py
           grep -F 'slot_count = plain_int("slot_count", 4, 4)' plugin/ifs_spoolman.py
@@ -38,6 +39,10 @@ jobs:
           grep -F 'spool_id <= 0' plugin/ifs_spoolman.py
           ! grep -F 'self.address_string(),fmt%args' plugin/ifs_spoolman.py
           grep -F 'AD5X_IFS_REF:-release/standalone-0.6.x' zmod-install.sh
+          grep -F 'NATIVE_PATCH_REVISION="4"' zmod-install.sh
+          grep -F 'AD5X_IFS_FLUIDD_PATCH_REVISION:-4' scripts/install_fluidd_native.sh
+          grep -F 'AD5X IFS Spoolman' native-fluidd/apply_overlay.py
+          grep -F '"patch_revision": 4' native-fluidd/config.json
           grep -F 'BACKUP_KEEP=5' update.sh
           grep -F 'BACKUP_KEEP=5' scripts/update.sh
           grep -F 'power_on_hook.sh' install.sh >/dev/null
@@ -45,8 +50,14 @@ jobs:
           grep -F 'power_on_hook.sh' scripts/update.sh >/dev/null
           grep -F 'power_on_hook.sh' PACKAGE_MANIFEST.txt >/dev/null
           grep -F 'power_on_hook.sh' zmod-install.sh >/dev/null
+          grep -F 'install_fluidd_native.sh' install.sh >/dev/null
+          grep -F 'install_fluidd_native.sh' update.sh >/dev/null
+          grep -F 'install_fluidd_native.sh' zmod-install.sh >/dev/null
+          grep -F 'install_fluidd_native.sh' scripts/start.sh >/dev/null
+          grep -F 'restore_fluidd_native.sh' scripts/uninstall.sh >/dev/null
           grep -F '/usr/data/config /opt/config' scripts/power_on_hook.sh >/dev/null
           grep -F 'fluidd_integration' scripts/boot_start.sh >/dev/null
+          grep -F 'fluidd_integration' scripts/start.sh >/dev/null
           grep -F 'fluidd_integration' scripts/status.sh >/dev/null
           grep -F 'ifs-spoolman-dashboard' scripts/uninstall_fluidd_card.sh >/dev/null
           grep -F 'ifs-spoolman-selection' scripts/uninstall_fluidd_card.sh >/dev/null
@@ -114,6 +125,8 @@ jobs:
           test -f /tmp/ad5x-old-started
 
           test ! -e "$TARGET/power_on_hook.sh"
+          test ! -e "$TARGET/install_fluidd_native.sh"
+          test ! -e "$TARGET/restore_fluidd_native.sh"
           test ! -e "$TARGET/ifs_spoolman.py"
           test ! -e "$TARGET/ui_v0_2.html"
 
@@ -125,6 +138,8 @@ jobs:
           test -n "$BACKUP_DIR"
           sudo test -f "$BACKUP_DIR/external-power_on.sh"
           sudo test -f "$BACKUP_DIR/.absent-power_on_hook.sh"
+          sudo test -f "$BACKUP_DIR/.absent-install_fluidd_native.sh"
+          sudo test -f "$BACKUP_DIR/.absent-restore_fluidd_native.sh"
 
       - name: Check package file parity
         run: |
@@ -147,6 +162,8 @@ jobs:
               "ifs-spoolman-selection.js",
               "install_fluidd_card.sh",
               "uninstall_fluidd_card.sh",
+              "install_fluidd_native.sh",
+              "restore_fluidd_native.sh",
               "power_on_hook.sh",
               "boot_start.sh",
               "start.sh",
@@ -171,6 +188,8 @@ jobs:
               "ifs-spoolman-dashboard.js",
               "ifs-spoolman-visibility.js",
               "ifs-spoolman-selection.js",
+              "install_fluidd_native.sh",
+              "restore_fluidd_native.sh",
               "power_on_hook.sh",
           ):
               if name not in flattened:
