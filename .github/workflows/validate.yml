@@ -34,7 +34,12 @@ jobs:
           grep -F 'server_version="IFS-Spoolman/0.5.1-beta"' plugin/ifs_spoolman.py
           grep -F 'slot_count = plain_int("slot_count", 4, 4)' plugin/ifs_spoolman.py
           ! grep -F 'plain_int("slot_count", 1, 32)' plugin/ifs_spoolman.py
-          grep -F 'release/standalone-0.6.x' zmod-install.sh
+          grep -F 'length > 65536' plugin/ifs_spoolman.py
+          grep -F 'spool_id <= 0' plugin/ifs_spoolman.py
+          ! grep -F 'self.address_string(),fmt%args' plugin/ifs_spoolman.py
+          grep -F 'AD5X_IFS_REF:-release/standalone-0.6.x' zmod-install.sh
+          grep -F 'BACKUP_KEEP=5' update.sh
+          grep -F 'BACKUP_KEEP=5' scripts/update.sh
           grep -F 'power_on_hook.sh' install.sh >/dev/null
           grep -F 'power_on_hook.sh' update.sh >/dev/null
           grep -F 'power_on_hook.sh' scripts/update.sh >/dev/null
