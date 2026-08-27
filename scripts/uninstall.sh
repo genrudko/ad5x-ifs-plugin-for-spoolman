@@ -3,6 +3,7 @@ set -eu
 
 APP_NAME="AD5X IFS Plugin for Spoolman"
 APP_DIR="/usr/data/config/mod_data/ifs_spoolman"
+ZMOD_ROOT="/usr/data/.mod/.zmod"
 
 CONFIRMED=0
 PURGE=0
@@ -49,6 +50,7 @@ fi
 "$APP_DIR/stop.sh" || true
 
 MOON_PID=""
+ROOT=""
 
 for P in /proc/[0-9]*; do
     [ -r "$P/cmdline" ] || continue
@@ -63,16 +65,24 @@ for P in /proc/[0-9]*; do
     esac
 done
 
-if [ -n "$MOON_PID" ]; then
+if [ -n "$MOON_PID" ] && [ -d "/proc/$MOON_PID/root" ]; then
     ROOT="/proc/$MOON_PID/root"
+elif [ -d "$ZMOD_ROOT" ]; then
+    ROOT="$ZMOD_ROOT"
+fi
 
+if [ -n "$ROOT" ]; then
     if chroot "$ROOT" /bin/sh -c \
         "[ -x '/opt/config/mod_data/ifs_spoolman/uninstall_fluidd_card.sh' ]"
     then
-        chroot "$ROOT" \
-            /opt/config/mod_data/ifs_spoolman/uninstall_fluidd_card.sh \
-            || true
+        if ! chroot "$ROOT" \
+            /opt/config/mod_data/ifs_spoolman/uninstall_fluidd_card.sh
+        then
+            echo "$APP_NAME: WARNING: не удалось полностью очистить Fluidd-интеграцию." >&2
+        fi
     fi
+else
+    echo "$APP_NAME: WARNING: корень Z-Mod не найден; Fluidd-интеграция не проверена." >&2
 fi
 
 if [ "$PURGE" -eq 0 ]; then
