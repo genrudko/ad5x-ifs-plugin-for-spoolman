@@ -51,22 +51,6 @@ else
     fi
 fi
 
-# Moonraker may exist before its HTTP API is ready. Wait for normal boot,
-# but do not make backend startup permanently depend on the API becoming ready:
-# the monitor loop can recover when Moonraker/Spoolman comes online later.
-i=0
-while [ "$i" -lt 60 ]; do
-    if wget -qO- \
-        http://127.0.0.1:7125/server/info \
-        >/dev/null 2>&1
-    then
-        break
-    fi
-
-    i=$((i + 1))
-    sleep 1
-done
-
 if [ -f "$PID_FILE" ]; then
     OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
 
@@ -95,6 +79,9 @@ if [ ! -f "$PROGRAM" ]; then
     exit 1
 fi
 
+# Do not wait for Moonraker HTTP here. The wrapper already waited for the
+# Moonraker process/chroot; the backend monitor is designed to recover from
+# temporary Moonraker or Spoolman unavailability after it starts.
 nohup "$PYTHON" "$PROGRAM" >>"$LOG_FILE" 2>&1 </dev/null &
 NEW_PID=$!
 
