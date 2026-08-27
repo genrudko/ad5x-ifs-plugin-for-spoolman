@@ -10,6 +10,7 @@ WORK_DIR="/usr/data/ad5x-ifs-plugin-installer"
 SOURCE_DIR="$WORK_DIR/source"
 TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"
 MOONRAKER_URL="http://127.0.0.1:7125"
+NATIVE_PATCH_REVISION="4"
 
 fail() {
     echo "ОШИБКА: $*" >&2
@@ -38,7 +39,15 @@ download_file() {
     [ -s "$LOCAL_PATH" ] || fail "загружен пустой файл: $REMOTE_PATH"
 }
 
-echo "=== AD5X IFS Plugin for Spoolman — установка/обновление для Z-Mod ==="
+fluidd_enabled() {
+    [ -f "$TARGET_DIR/config.json" ] || return 0
+    if grep -Eq '"fluidd_integration"[[:space:]]*:[[:space:]]*false([[:space:],}]|$)' "$TARGET_DIR/config.json"; then
+        return 1
+    fi
+    return 0
+}
+
+echo "=== AD5X IFS Spoolman — установка/обновление для Z-Mod ==="
 echo "Source ref: $REF"
 
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
@@ -87,6 +96,8 @@ for FILE in \
     scripts/uninstall.sh \
     scripts/install_fluidd_card.sh \
     scripts/uninstall_fluidd_card.sh \
+    scripts/install_fluidd_native.sh \
+    scripts/restore_fluidd_native.sh \
     scripts/power_on_hook.sh \
     examples/config.example.json \
     examples/assignments.example.json
@@ -109,10 +120,25 @@ else
     RESULT_TEXT="Установка завершена"
 fi
 
+if fluidd_enabled; then
+    echo "Fluidd UI: проверка нативной интеграции..."
+    if AD5X_IFS_FLUIDD_PATCH_REVISION="$NATIVE_PATCH_REVISION" \
+        "$TARGET_DIR/install_fluidd_native.sh"
+    then
+        FLUIDD_TEXT="Нативная карточка: установлена (patch $NATIVE_PATCH_REVISION)"
+    else
+        echo "ПРЕДУПРЕЖДЕНИЕ: нативная сборка Fluidd недоступна; оставлена legacy-интеграция." >&2
+        FLUIDD_TEXT="Нативная карточка: недоступна, используется legacy fallback"
+    fi
+else
+    FLUIDD_TEXT="Интеграция Fluidd отключена в config.json"
+fi
+
 echo
 echo "=== $RESULT_TEXT ==="
+echo "Версия: $(cat "$TARGET_DIR/VERSION")"
 echo "Автозапуск: mod_data/power_on.sh"
-echo "Карточка показывается только на Dashboard и поддерживает сворачивание."
+echo "$FLUIDD_TEXT"
 echo "Откройте: http://IP_ПРИНТЕРА:7913/"
 echo "Проверка состояния:"
 echo "$TARGET_DIR/status.sh"
