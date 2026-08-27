@@ -27,8 +27,10 @@ wget -qO- http://127.0.0.1:7125/server/spoolman/status
 Подключитесь к принтеру по SSH как `root` и вставьте:
 
 ```sh
-rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/release/standalone-0.6.x/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
+
+`release/standalone-0.6.x` — отдельная поддерживаемая линия исходного standalone-плагина. Экспериментальные Filament Manager ветки в неё не входят.
 
 Параметр `?cb=$(date +%s)` добавляет уникальное значение к URL и не позволяет прокси или CDN вернуть старую закэшированную версию установщика.
 
@@ -40,7 +42,10 @@ rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw
 - загружает необходимые файлы напрямую с `raw.githubusercontent.com`;
 - добавляет cache-busting к каждому файлу;
 - проверяет Moonraker и подключение Spoolman до изменения файлов;
-- автоматически определяет новую или существующую установку.
+- автоматически определяет новую или существующую установку;
+- регистрирует автозапуск через штатный пользовательский `mod_data/power_on.sh` Z-Mod.
+
+Автозапуск добавляется в отдельном отмеченном блоке. Существующее пользовательское содержимое `power_on.sh` не заменяется. Повторная установка обновляет тот же блок и не создаёт дубликаты.
 
 ### Когда плагин ещё не установлен
 
@@ -57,9 +62,10 @@ rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw
 1. создаёт резервную копию рабочих файлов, `config.json` и `assignments.json`;
 2. останавливает только процесс плагина;
 3. копирует новую версию;
-4. запускает плагин;
-5. проверяет `/api/health`;
-6. автоматически восстанавливает предыдущую версию при ошибке.
+4. восстанавливает/обновляет штатный boot-hook;
+5. запускает плагин;
+6. проверяет `/api/health`;
+7. автоматически восстанавливает предыдущую версию при ошибке.
 
 Существующие настройки и назначения катушек сохраняются. Klipper, MCU, Moonraker, Spoolman и сам Z-Mod не удаляются и не переустанавливаются.
 
@@ -75,28 +81,36 @@ http://IP_ПРИНТЕРА:7913/
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
-## 3. Почему не используется архив codeload.github.com
+`status.sh` проверяет процесс, принадлежность PID, отсутствие дубликатов backend, boot-hook, API и компоненты Fluidd-интеграции. Также показывает последние записи `boot.log` и `events.log`.
+
+## 3. Автозапуск и порядок старта Z-Mod
+
+Z-Mod выполняет пользовательский код включения из:
+
+```text
+/usr/data/config/mod_data/power_on.sh
+```
+
+Плагин добавляет туда только собственный блок между маркерами `AD5X IFS Plugin for Spoolman`. Блок запускает `ifs_spoolman/start.sh` в фоне, поэтому не блокирует остальные пользовательские действия при старте.
+
+`start.sh` допускает обычную гонку загрузки и ждёт появления процесса Moonraker до 120 секунд. Внутри Z-Mod backend дополнительно ждёт готовности HTTP API Moonraker, но после таймаута всё равно запускается: цикл мониторинга сам восстановит связь, когда Moonraker/Spoolman станет доступен.
+
+## 4. Почему не используется архив codeload.github.com
 
 На некоторых сборках чистого Z-Mod встроенный `wget` успешно подключается к `raw.githubusercontent.com`, но получает TLS alert 80 или `Connection reset by peer` при скачивании архива с `codeload.github.com`.
 
 Поэтому рекомендуемый установщик не скачивает ZIP/TAR-архив и не распаковывает его. Он получает только необходимые файлы напрямую с raw-домена.
 
-## 4. Установка через git clone
+## 5. Установка через git clone
 
 Используйте этот вариант только когда команда `git --version` действительно работает на принтере.
-
-Проверка:
-
-```sh
-git --version
-```
 
 Новая установка:
 
 ```sh
 cd /usr/data
 rm -rf ad5x-ifs-plugin-for-spoolman
-git clone https://github.com/genrudko/ad5x-ifs-plugin-for-spoolman.git
+git clone --branch release/standalone-0.6.x https://github.com/genrudko/ad5x-ifs-plugin-for-spoolman.git
 cd ad5x-ifs-plugin-for-spoolman
 chmod +x install.sh update.sh scripts/*.sh
 ./install.sh
@@ -113,26 +127,6 @@ git pull
 
 На чистом Z-Mod `git` может отсутствовать. В этом случае ничего дополнительно устанавливать не требуется — используйте рекомендуемую команду через `wget`.
 
-## 5. Что делает install.sh
-
-Установщик:
-
-1. проверяет структуру загруженного набора файлов;
-2. создаёт рабочий каталог;
-3. копирует backend, веб-интерфейс, Fluidd-card и служебные скрипты;
-4. создаёт отсутствующие `config.json` и `assignments.json` из примеров;
-5. не перезаписывает существующие назначения и настройки;
-6. устанавливает интеграцию Fluidd;
-7. запускает только процесс AD5X IFS Plugin.
-
-Для копирования без запуска сервиса:
-
-```sh
-./install.sh --no-start
-```
-
-Для обновления поверх существующей версии используйте `update.sh`, а не `install.sh`.
-
 ## 6. Управление сервисом
 
 ```sh
@@ -140,6 +134,8 @@ git pull
 /usr/data/config/mod_data/ifs_spoolman/stop.sh
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
+
+`start.sh` и `stop.sh` проверяют командную строку процесса, а не только существование PID. Это защищает от ложного «уже запущен» и от остановки постороннего процесса после повторного использования PID.
 
 ## 7. Удаление
 
@@ -154,3 +150,5 @@ git pull
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes --purge
 ```
+
+Удаление сначала убирает только управляемый блок плагина из `mod_data/power_on.sh`, затем останавливает backend и удаляет Fluidd-интеграцию. Чужой пользовательский код в `power_on.sh` не удаляется.
