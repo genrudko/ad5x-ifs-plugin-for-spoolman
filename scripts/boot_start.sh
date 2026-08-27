@@ -8,6 +8,7 @@ LOG_FILE="$APP_DIR/ifs_spoolman.log"
 PYTHON="/root/moonraker-env/bin/python3"
 PROGRAM="$APP_DIR/ifs_spoolman.py"
 CONFIG_FILE="$APP_DIR/config.json"
+FLUIDD_NATIVE_MARKER="/root/fluidd/ad5x_ifs_native.json"
 
 pid_is_plugin() {
     PID="$1"
@@ -40,12 +41,20 @@ fluidd_enabled() {
 }
 
 if fluidd_enabled; then
-    if [ -x "$APP_DIR/install_fluidd_card.sh" ]; then
+    if [ -f "$FLUIDD_NATIVE_MARKER" ]; then
+        # A compatibility build contains the IFS card as a real Fluidd Vue
+        # component. Never add the legacy HTML/DOM scripts on top of it.
+        echo "$APP_NAME: native Fluidd integration detected; legacy injection skipped." \
+            >>"$APP_DIR/fluidd_card.log" 2>&1 || true
+    elif [ -x "$APP_DIR/install_fluidd_card.sh" ]; then
         "$APP_DIR/install_fluidd_card.sh" \
             >>"$APP_DIR/fluidd_card.log" 2>&1 || true
     fi
 else
-    if [ -x "$APP_DIR/uninstall_fluidd_card.sh" ]; then
+    if [ -f "$FLUIDD_NATIVE_MARKER" ]; then
+        echo "$APP_NAME: native Fluidd integration is installed; disable requires native Fluidd rollback." \
+            >>"$APP_DIR/fluidd_card.log" 2>&1 || true
+    elif [ -x "$APP_DIR/uninstall_fluidd_card.sh" ]; then
         "$APP_DIR/uninstall_fluidd_card.sh" \
             >>"$APP_DIR/fluidd_card.log" 2>&1 || true
     fi
