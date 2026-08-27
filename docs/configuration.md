@@ -1,5 +1,7 @@
 # Configuration
 
+[Русский](configuration_RU.md)
+
 Runtime configuration is stored at:
 
 ```text
@@ -16,7 +18,7 @@ Slot assignments are stored separately in `assignments.json` and are normally ed
 | `moonraker_url` | `http://127.0.0.1:7125` | Local Moonraker API base URL. |
 | `listen_host` | `0.0.0.0` | Plugin HTTP bind address. |
 | `listen_port` | `7913` | Plugin HTTP port. |
-| `slot_count` | `4` | Number of IFS slots. |
+| `slot_count` | `4` | Fixed number of physical AD5X IFS slots. Only `4` is supported. |
 | `poll_interval` | `1.0` | Sensor polling interval in seconds. |
 | `http_timeout` | `5.0` | Moonraker request timeout. |
 | `spoolman_proxy_timeout` | `10.0` | Spoolman proxy request timeout. |
@@ -27,6 +29,13 @@ Slot assignments are stored separately in `assignments.json` and are normally ed
 | `sync_retry_delay` | `1.0` | Delay between attempts. |
 | `event_log_max_bytes` | `524288` | Maximum structured event-log size before rotation. |
 | `event_log_backup_count` | `3` | Number of rotated event logs to retain. |
-| `fluidd_integration` | `true` | Reports/enables Fluidd integration behavior. |
+| `fluidd_integration` | `true` | Enables the static Fluidd card/integration. When set to `false`, an existing injected integration is removed on the next plugin start. |
 
-Unknown keys and invalid value types are rejected. Restart the plugin after manually editing the file.
+Unknown keys and invalid value types are rejected. `slot_count` is intentionally not a generic MMU adaptation control: this standalone release targets the four-slot AD5X IFS hardware.
+
+After manually editing the file, restart only the plugin:
+
+```sh
+/usr/data/config/mod_data/ifs_spoolman/stop.sh
+/usr/data/config/mod_data/ifs_spoolman/start.sh
+```
