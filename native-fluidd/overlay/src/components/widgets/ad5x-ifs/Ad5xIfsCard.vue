@@ -19,7 +19,8 @@
 
       <app-btn
         small
-        text
+        outlined
+        color="primary"
         class="me-1 my-1"
         @click="openManager"
       >
@@ -443,14 +444,15 @@ export default Vue.extend({
 }
 
 .ifs-slot--selected {
-  border-color: var(--v-primary-base, #2196f3);
-  background: rgba(127, 127, 127, .10);
-  box-shadow: inset 3px 0 0 var(--v-primary-base, #2196f3), inset 0 0 0 1px rgba(127, 127, 127, .10);
+  border: 2px solid var(--v-primary-base, #2196f3);
+  background: rgba(127, 127, 127, .12);
+  box-shadow: inset 4px 0 0 var(--v-primary-base, #2196f3);
   opacity: 1;
 }
 
 .ifs-slot--active:not(.ifs-slot--selected) {
-  border-color: var(--v-success-base, #4caf50);
+  border: 2px solid var(--v-success-base, #4caf50);
+  background: rgba(127, 127, 127, .085);
 }
 
 .ifs-slot--active .ifs-slot__number {
@@ -467,8 +469,9 @@ export default Vue.extend({
 }
 
 .ifs-slot__number {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .ifs-slot__material {
