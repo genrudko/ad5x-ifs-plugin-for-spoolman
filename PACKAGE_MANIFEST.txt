@@ -1,5 +1,5 @@
 # AD5X IFS Plugin for Spoolman
-# Runtime/package manifest for 0.6.2-dashboard-test1
+# Runtime/package manifest for 0.6.4-beta
 
 ifs_spoolman.py
 ui_v0_2.html
@@ -10,6 +10,7 @@ ifs-spoolman-visibility.js
 ifs-spoolman-selection.js
 install_fluidd_card.sh
 uninstall_fluidd_card.sh
+power_on_hook.sh
 boot_start.sh
 start.sh
 stop.sh
