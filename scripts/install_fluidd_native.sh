@@ -2,7 +2,7 @@
 set -eu
 
 APP_NAME="AD5X IFS Plugin for Spoolman"
-PATCH_REVISION="${AD5X_IFS_FLUIDD_PATCH_REVISION:-1}"
+PATCH_REVISION="${AD5X_IFS_FLUIDD_PATCH_REVISION:-4}"
 REPO="genrudko/ad5x-ifs-plugin-for-spoolman"
 RAW_BRANCH="fluidd-compatibility-files"
 CACHE_BUSTER="$(date +%s 2>/dev/null || echo "$$")-$$"
