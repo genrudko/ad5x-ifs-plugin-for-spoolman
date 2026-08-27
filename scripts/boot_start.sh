@@ -7,6 +7,7 @@ PID_FILE="$APP_DIR/ifs_spoolman.pid"
 LOG_FILE="$APP_DIR/ifs_spoolman.log"
 PYTHON="/root/moonraker-env/bin/python3"
 PROGRAM="$APP_DIR/ifs_spoolman.py"
+CONFIG_FILE="$APP_DIR/config.json"
 
 pid_is_plugin() {
     PID="$1"
@@ -29,12 +30,28 @@ find_running_plugin() {
     return 1
 }
 
-if [ -x "$APP_DIR/install_fluidd_card.sh" ]; then
-    "$APP_DIR/install_fluidd_card.sh" \
-        >>"$APP_DIR/fluidd_card.log" 2>&1 || true
+fluidd_enabled() {
+    # Missing config or missing key keeps the documented default: enabled.
+    [ -f "$CONFIG_FILE" ] || return 0
+    if grep -Eq '"fluidd_integration"[[:space:]]*:[[:space:]]*false([[:space:],}]|$)' "$CONFIG_FILE"; then
+        return 1
+    fi
+    return 0
+}
+
+if fluidd_enabled; then
+    if [ -x "$APP_DIR/install_fluidd_card.sh" ]; then
+        "$APP_DIR/install_fluidd_card.sh" \
+            >>"$APP_DIR/fluidd_card.log" 2>&1 || true
+    fi
+else
+    if [ -x "$APP_DIR/uninstall_fluidd_card.sh" ]; then
+        "$APP_DIR/uninstall_fluidd_card.sh" \
+            >>"$APP_DIR/fluidd_card.log" 2>&1 || true
+    fi
 fi
 
-# Moonraker may exist before its HTTP API is ready.  Wait for normal boot,
+# Moonraker may exist before its HTTP API is ready. Wait for normal boot,
 # but do not make backend startup permanently depend on the API becoming ready:
 # the monitor loop can recover when Moonraker/Spoolman comes online later.
 i=0
