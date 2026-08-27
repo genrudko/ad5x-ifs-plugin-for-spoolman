@@ -1,0 +1,57 @@
+name: Publish standalone v0.6.4-beta
+
+on:
+  push:
+    branches:
+      - ops/publish-standalone-v0.6.4-beta
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish v0.6.4-beta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v0.6.4-beta
+          TARGET_SHA: bc5599da93645286db1e0856ded6fec43f79e286
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; nothing to do."
+            exit 0
+          fi
+
+          cat > /tmp/release-notes.md <<'EOF'
+          Maintenance beta release for the standalone AD5X IFS Plugin for Spoolman.
+
+          ### Fixed
+          - Restores reliable plugin startup after printer reboot / cold power-on by registering an idempotent Z-Mod `mod_data/power_on.sh` hook.
+          - Preserves unrelated user code in `power_on.sh` and removes only the plugin-managed block during uninstall.
+          - Handles Z-Mod / Moonraker boot ordering more robustly and prevents duplicate backend processes from stale PID files.
+          - Improves update rollback, backup retention, diagnostics, Fluidd cleanup, request bounds, and runtime version consistency.
+
+          ### Install or update
+          Connect to the printer over SSH as `root` and run:
+
+          ```sh
+          rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/release/standalone-0.6.x/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+          ```
+
+          The same command performs a clean installation or safely updates an existing installation. Existing `config.json` and `assignments.json` are preserved during update.
+
+          ### Validation
+          The release candidate was validated on real AD5X hardware. The `v0.6.3-beta` reboot-loss behavior was reproduced on a clean standalone installation, then the same cold-boot test passed with `v0.6.4-beta`: the plugin started automatically, API port `7913` became healthy, and Spoolman synchronization recovered normally during boot.
+
+          Source commit: `bc5599da93645286db1e0856ded6fec43f79e286`.
+          EOF
+
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "AD5X IFS Plugin for Spoolman v0.6.4-beta" \
+            --notes-file /tmp/release-notes.md \
+            --latest
