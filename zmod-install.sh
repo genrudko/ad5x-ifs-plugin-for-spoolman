@@ -3,7 +3,7 @@ set -eu
 
 REPO_OWNER="genrudko"
 REPO_NAME="ad5x-ifs-plugin-for-spoolman"
-REF="main"
+REF="${AD5X_IFS_REF:-release/standalone-0.6.x}"
 RAW_BASE="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/$REF"
 CACHE_BUSTER="$(date +%s 2>/dev/null || echo "$$")"
 WORK_DIR="/usr/data/ad5x-ifs-plugin-installer"
@@ -39,6 +39,7 @@ download_file() {
 }
 
 echo "=== AD5X IFS Plugin for Spoolman — установка/обновление для Z-Mod ==="
+echo "Source ref: $REF"
 
 [ "$(id -u)" = "0" ] || fail "скрипт нужно запускать по SSH от root"
 command -v wget >/dev/null 2>&1 || fail "в системе не найден wget"
@@ -86,9 +87,9 @@ for FILE in \
     scripts/uninstall.sh \
     scripts/install_fluidd_card.sh \
     scripts/uninstall_fluidd_card.sh \
+    scripts/power_on_hook.sh \
     examples/config.example.json \
     examples/assignments.example.json
-
 do
     download_file "$FILE"
 done
@@ -110,6 +111,7 @@ fi
 
 echo
 echo "=== $RESULT_TEXT ==="
+echo "Автозапуск: mod_data/power_on.sh"
 echo "Карточка показывается только на Dashboard и поддерживает сворачивание."
 echo "Откройте: http://IP_ПРИНТЕРА:7913/"
 echo "Проверка состояния:"
