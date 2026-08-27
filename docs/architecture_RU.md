@@ -7,7 +7,7 @@
 1. **Python backend** — `plugin/ifs_spoolman.py`
    - читает активный канал AD5X IFS;
    - подтверждает переключение;
-   - сопоставляет каналы с ID катушек Spoolman;
+   - сопоставляет четыре физических канала с ID катушек Spoolman;
    - взаимодействует с Moonraker;
    - обслуживает веб-интерфейс и JSON API;
    - ведёт структурированный журнал событий с ротацией.
@@ -17,18 +17,23 @@
    - отображает катушки Spoolman;
    - показывает состояние и запускает ручную синхронизацию.
 
-3. **Карточка Fluidd** — `plugin/ifs-spoolman-card.js`
-   - периодически получает состояние плагина;
-   - отображает компактную панель AD5X IFS.
+3. **Интеграция Fluidd**
+   - `plugin/ifs-spoolman-card.js` — карточка;
+   - `plugin/ifs-spoolman-layout.js` — размещение;
+   - `plugin/ifs-spoolman-dashboard.js` — показ только на Dashboard и сворачивание;
+   - `plugin/ifs-spoolman-selection.js` — индикация активного/просматриваемого слота.
 
-4. **Модуль размещения во Fluidd** — `plugin/ifs-spoolman-layout.js`
-   - управляет расположением карточки в интерфейсе Fluidd.
+4. **Z-Mod lifecycle**
+   - `scripts/power_on_hook.sh` идемпотентно управляет только собственным отмеченным блоком в `mod_data/power_on.sh`;
+   - блок поддерживает оба видимых пути Z-Mod runtime: `/usr/data/config/...` и `/opt/config/...`;
+   - `scripts/start.sh` ждёт появления Moonraker и входит в его chroot;
+   - `scripts/boot_start.sh` применяет/удаляет Fluidd-интеграцию согласно `fluidd_integration`, нормализует PID и запускает backend;
+   - `scripts/stop.sh` завершает только процессы, чья командная строка действительно принадлежит `ifs_spoolman.py`.
 
-5. **Служебные скрипты** — `scripts/`
-   - запуск, остановка и проверка состояния;
-   - установка и удаление интеграции Fluidd;
-   - обновление с откатом;
-   - удаление с сохранением пользовательских данных.
+5. **Установка и обслуживание**
+   - установка и обновление закреплены за `release/standalone-0.6.x`;
+   - обновление выполняется с резервной копией, health-check и rollback;
+   - удаление сохраняет пользовательские данные по умолчанию, очищает Fluidd и удаляет только собственный boot-hook.
 
 ## Последовательность синхронизации
 
@@ -43,6 +48,12 @@
 ## Постоянные данные
 
 - `config.json` — рабочие настройки;
-- `assignments.json` — соответствие каналов и катушек;
+- `assignments.json` — соответствие четырёх каналов и катушек;
 - `events.log*` — структурированные журналы событий;
-- `ifs_spoolman.log` — вывод процесса и журнал HTTP-запросов.
+- `ifs_spoolman.log` — вывод процесса и HTTP-журнал;
+- `boot.log` — вывод boot-hook/start lifecycle;
+- `backups/` — резервные копии обновлений.
+
+## Граница продукта
+
+Эта архитектура относится только к исходному standalone **AD5X IFS Plugin for Spoolman**. Экспериментальные Filament Manager реализации и frontend-neutral IFS / Materials Manager из `Plugins_AD5X` не являются runtime-компонентами этой release-линии.
