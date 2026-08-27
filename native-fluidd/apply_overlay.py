@@ -107,7 +107,7 @@ def main() -> int:
     inject_locale(
         root / "src/locales/en.yaml",
         "  ad5x_ifs:\n"
-        "    title: \"AD5X IFS\"\n"
+        "    title: \"AD5X IFS Spoolman\"\n"
         "    connected: \"Connected\"\n"
         "    disconnected: \"Offline\"\n"
         "    manage: \"Manage\"\n"
@@ -125,7 +125,7 @@ def main() -> int:
     inject_locale(
         root / "src/locales/ru.yaml",
         "  ad5x_ifs:\n"
-        "    title: \"AD5X IFS\"\n"
+        "    title: \"AD5X IFS Spoolman\"\n"
         "    connected: \"Подключено\"\n"
         "    disconnected: \"Нет связи\"\n"
         "    manage: \"Управление\"\n"
@@ -140,7 +140,7 @@ def main() -> int:
         "    unnamed: \"Без названия\"\n",
     )
 
-    print("AD5X IFS native Fluidd overlay applied")
+    print("AD5X IFS Spoolman native Fluidd overlay applied")
     return 0
 
 
