@@ -155,12 +155,14 @@ def validate_config(raw):
             "true или false"
         )
 
+    slot_count = plain_int("slot_count", 4, 4)
+
     return {
         "schema_version": schema_version,
         "moonraker_url": moonraker_url,
         "listen_host": listen_host.strip(),
         "listen_port": plain_int("listen_port", 1, 65535),
-        "slot_count": plain_int("slot_count", 1, 32),
+        "slot_count": slot_count,
         "poll_interval": number("poll_interval", 0.1, 60.0),
         "http_timeout": number("http_timeout", 0.5, 120.0),
         "spoolman_proxy_timeout": number(
