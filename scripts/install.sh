@@ -37,6 +37,8 @@ ifs-spoolman-visibility.js
 ifs-spoolman-selection.js
 install_fluidd_card.sh
 uninstall_fluidd_card.sh
+install_fluidd_native.sh
+restore_fluidd_native.sh
 power_on_hook.sh
 boot_start.sh
 start.sh
@@ -72,18 +74,7 @@ if [ "$SOURCE_DIR" != "$TARGET_DIR" ]; then
     done
 fi
 
-chmod +x \
-    "$TARGET_DIR/boot_start.sh" \
-    "$TARGET_DIR/start.sh" \
-    "$TARGET_DIR/stop.sh" \
-    "$TARGET_DIR/status.sh" \
-    "$TARGET_DIR/install.sh" \
-    "$TARGET_DIR/update.sh" \
-    "$TARGET_DIR/uninstall.sh" \
-    "$TARGET_DIR/install_fluidd_card.sh" \
-    "$TARGET_DIR/uninstall_fluidd_card.sh" \
-    "$TARGET_DIR/power_on_hook.sh"
-
+chmod +x "$TARGET_DIR"/*.sh
 "$TARGET_DIR/power_on_hook.sh" install
 
 if [ "$NO_START" -eq 0 ]; then
