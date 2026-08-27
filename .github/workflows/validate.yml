@@ -19,12 +19,81 @@ jobs:
         run: |
           sh -n install.sh
           sh -n update.sh
+          sh -n zmod-install.sh
           for file in scripts/*.sh; do sh -n "$file"; done
 
       - name: Validate example JSON
         run: |
           python3 -m json.tool examples/config.example.json >/dev/null
           python3 -m json.tool examples/assignments.example.json >/dev/null
+
+      - name: Validate standalone release invariants
+        run: |
+          test "$(cat VERSION)" = "0.6.4-beta"
+          grep -F 'APP_VERSION = "0.5.1-beta"' plugin/ifs_spoolman.py
+          grep -F 'server_version="IFS-Spoolman/0.5.1-beta"' plugin/ifs_spoolman.py
+          grep -F 'release/standalone-0.6.x' zmod-install.sh
+          grep -F 'power_on_hook.sh' install.sh >/dev/null
+          grep -F 'power_on_hook.sh' update.sh >/dev/null
+          grep -F 'power_on_hook.sh' scripts/update.sh >/dev/null
+          grep -F 'power_on_hook.sh' PACKAGE_MANIFEST.txt >/dev/null
+          grep -F 'power_on_hook.sh' zmod-install.sh >/dev/null
+          grep -F 'ifs-spoolman-dashboard' scripts/uninstall_fluidd_card.sh >/dev/null
+          grep -F 'ifs-spoolman-selection' scripts/uninstall_fluidd_card.sh >/dev/null
+          grep -F 'AD5X IFS Plugin for Spoolman >>>' scripts/power_on_hook.sh >/dev/null
+          ! grep -F '0.2.2 beta' plugin/ifs_spoolman.py
+          ! grep -F '0.2.2 beta' plugin/ui_v0_2.html
+
+      - name: Check package file parity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = {
+              line.strip()
+              for line in Path("PACKAGE_MANIFEST.txt").read_text().splitlines()
+              if line.strip() and not line.startswith("#")
+          }
+
+          expected_runtime = {
+              "ifs_spoolman.py",
+              "ui_v0_2.html",
+              "ifs-spoolman-card.js",
+              "ifs-spoolman-layout.js",
+              "ifs-spoolman-dashboard.js",
+              "ifs-spoolman-visibility.js",
+              "ifs-spoolman-selection.js",
+              "install_fluidd_card.sh",
+              "uninstall_fluidd_card.sh",
+              "power_on_hook.sh",
+              "boot_start.sh",
+              "start.sh",
+              "stop.sh",
+              "status.sh",
+              "install.sh",
+              "update.sh",
+              "uninstall.sh",
+              "VERSION",
+              "PACKAGE_MANIFEST.txt",
+          }
+
+          if manifest != expected_runtime:
+              raise SystemExit(
+                  "PACKAGE_MANIFEST.txt mismatch:\n"
+                  f"missing={sorted(expected_runtime - manifest)}\n"
+                  f"extra={sorted(manifest - expected_runtime)}"
+              )
+
+          flattened = Path("scripts/install.sh").read_text(encoding="utf-8")
+          for name in (
+              "ifs-spoolman-dashboard.js",
+              "ifs-spoolman-visibility.js",
+              "ifs-spoolman-selection.js",
+              "power_on_hook.sh",
+          ):
+              if name not in flattened:
+                  raise SystemExit(f"scripts/install.sh misses {name}")
+          PY
 
       - name: Reject private runtime artifacts
         run: |
