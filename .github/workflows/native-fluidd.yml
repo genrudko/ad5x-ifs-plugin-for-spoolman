@@ -3,6 +3,7 @@ name: Native Fluidd compatibility
 on:
   push:
     branches:
+      - main
       - feature/native-fluidd-ui-v1
     paths:
       - 'native-fluidd/**'
@@ -38,6 +39,7 @@ jobs:
           INPUT_UPSTREAM_TAG: ${{ inputs.upstream_tag }}
           INPUT_PUBLISH: ${{ inputs.publish }}
           EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -eu
 
@@ -59,6 +61,8 @@ jobs:
 
           PUBLISH_REQUESTED=false
           if [ "$EVENT_NAME" = "schedule" ]; then
+            PUBLISH_REQUESTED=true
+          elif [ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" = "main" ]; then
             PUBLISH_REQUESTED=true
           elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "${INPUT_PUBLISH:-false}" = "true" ]; then
             PUBLISH_REQUESTED=true
@@ -205,6 +209,7 @@ jobs:
           set -eu
           if ! gh release view "$DIST_RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$DIST_RELEASE_TAG" \
+              --target "$GITHUB_SHA" \
               --title "Native Fluidd compatibility builds" \
               --notes "Native Fluidd builds generated from exact ghzserg/fluidd releases with the standalone AD5X IFS dashboard component applied. This is a rolling compatibility-asset channel, not a replacement Fluidd fork."
           fi
