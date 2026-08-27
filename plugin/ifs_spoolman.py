@@ -3075,11 +3075,24 @@ class Handler(BaseHTTPRequestHandler):
 
 
     server_version="IFS-Spoolman/0.5.1-beta"
-    def log_message(self,fmt,*args): print("%s - %s"%(self.address_string(),fmt%args),flush=True)
+    def log_message(self, fmt, *args):
+        # The Fluidd/UI clients poll frequently.  Do not write one access-log
+        # line per request to the unbounded stdout log; operational events are
+        # already recorded in the rotating structured events.log.
+        return
     def send_json(self,status,value):
         raw=json.dumps(value,ensure_ascii=False).encode("utf-8"); self.send_response(status); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Content-Length",str(len(raw))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(raw)
     def read_json(self):
-        length=int(self.headers.get("Content-Length","0")); return json.loads(self.rfile.read(length).decode("utf-8")) if length>0 else {}
+        raw_length = self.headers.get("Content-Length", "0")
+        try:
+            length = int(raw_length)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Некорректный Content-Length") from exc
+        if length < 0 or length > 65536:
+            raise ValueError("Слишком большой JSON-запрос")
+        if length == 0:
+            return {}
+        return json.loads(self.rfile.read(length).decode("utf-8"))
     def do_GET(self):
         if self.path=="/api/health":
             self.send_json(200,build_health())
@@ -3102,6 +3115,8 @@ class Handler(BaseHTTPRequestHandler):
                 body=self.read_json(); slot=int(body.get("slot"))
                 if slot not in (1,2,3,4): raise ValueError("Некорректный слот")
                 value=body.get("spool_id"); spool_id=int(value) if value not in (None,"",0,"0") else None
+                if spool_id is not None and spool_id <= 0:
+                    raise ValueError("Некорректный ID катушки Spoolman")
                 with lock:
                     if spool_id is not None:
                         for other_slot,other_id in assignments.items():
