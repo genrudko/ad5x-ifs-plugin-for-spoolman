@@ -23,8 +23,10 @@ The response must contain:
 Connect to the printer over SSH as `root` and run:
 
 ```sh
-rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/release/standalone-0.6.x/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
+
+`release/standalone-0.6.x` is the maintained line for the original standalone plugin. Later Filament Manager experiments are not part of this line.
 
 The `?cb=$(date +%s)` query adds a unique value to the URL so a proxy or CDN cannot return an outdated installer.
 
@@ -36,7 +38,10 @@ This method is designed for a clean Z-Mod installation:
 - it downloads only the required files from `raw.githubusercontent.com`;
 - it adds cache-busting to every downloaded file;
 - it checks Moonraker and Spoolman before changing anything;
-- it automatically detects a new or existing installation.
+- it automatically detects a new or existing installation;
+- it registers startup through Z-Mod's user-managed `mod_data/power_on.sh`.
+
+The startup integration is stored in a marked plugin-owned block. Existing user content in `power_on.sh` is preserved. Reinstalling or updating replaces the same managed block instead of creating duplicates.
 
 For a new installation, the helper runs `install.sh` and installs the plugin to:
 
@@ -49,9 +54,10 @@ For an existing installation, the helper runs `update.sh`, which:
 1. backs up runtime files, `config.json`, and `assignments.json`;
 2. stops only the plugin process;
 3. copies the new files;
-4. starts the plugin;
-5. checks `/api/health`;
-6. restores the previous version automatically on failure.
+4. restores/updates the Z-Mod startup hook;
+5. starts the plugin;
+6. checks `/api/health`;
+7. restores the previous version automatically on failure.
 
 Existing configuration and spool assignments are preserved. Klipper, the MCU, Moonraker, Spoolman, and Z-Mod are not removed or reinstalled.
 
@@ -67,13 +73,27 @@ Check status:
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
-## 3. Why codeload.github.com is not used
+`status.sh` validates process ownership, duplicate backends, the Z-Mod startup hook, HTTP API, and Fluidd integration, and also shows recent `boot.log` and `events.log` entries.
+
+## 3. Startup and Z-Mod boot order
+
+Z-Mod executes user power-on code from:
+
+```text
+/usr/data/config/mod_data/power_on.sh
+```
+
+The plugin adds only its marked block to that file. The block launches `ifs_spoolman/start.sh` in the background so it does not block other user startup actions.
+
+`start.sh` tolerates normal boot ordering and waits up to 120 seconds for the Moonraker process. Inside the Z-Mod environment the backend additionally waits for Moonraker's HTTP API, but still starts after that wait expires; its monitor loop can recover automatically when Moonraker/Spoolman becomes available later.
+
+## 4. Why codeload.github.com is not used
 
 On some clean Z-Mod builds, the bundled `wget` can access `raw.githubusercontent.com` but fails while downloading an archive from `codeload.github.com`, reporting TLS alert 80 or `Connection reset by peer`.
 
 The recommended helper therefore does not download or extract a repository archive. It fetches only the files required by the plugin directly from the raw content host.
 
-## 4. Installation with git clone
+## 5. Installation with git clone
 
 Use this only when `git --version` works on the printer.
 
@@ -82,7 +102,7 @@ New installation:
 ```sh
 cd /usr/data
 rm -rf ad5x-ifs-plugin-for-spoolman
-git clone https://github.com/genrudko/ad5x-ifs-plugin-for-spoolman.git
+git clone --branch release/standalone-0.6.x https://github.com/genrudko/ad5x-ifs-plugin-for-spoolman.git
 cd ad5x-ifs-plugin-for-spoolman
 chmod +x install.sh update.sh scripts/*.sh
 ./install.sh
@@ -99,7 +119,7 @@ git pull
 
 A clean Z-Mod build may not include git. Use the recommended wget command instead of installing extra packages on the printer.
 
-## 5. Runtime commands
+## 6. Runtime commands
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/start.sh
@@ -107,7 +127,9 @@ A clean Z-Mod build may not include git. Use the recommended wget command instea
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
-## 6. Uninstall
+`start.sh` and `stop.sh` validate process command lines rather than trusting a PID alone. This prevents stale/reused PIDs from causing a false "already running" result or terminating an unrelated process.
+
+## 7. Uninstall
 
 Keep a backup of configuration and logs:
 
@@ -120,3 +142,5 @@ Permanently remove user data:
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes --purge
 ```
+
+Uninstall first removes only the plugin-owned block from `mod_data/power_on.sh`, then stops the backend and removes Fluidd integration. Unrelated user startup code is preserved.
