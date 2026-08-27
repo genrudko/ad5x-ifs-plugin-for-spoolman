@@ -1,0 +1,43 @@
+name: Publish standalone release baseline
+
+on:
+  push:
+    branches:
+      - ops/publish-standalone-v0.6.3-beta
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish canonical standalone release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v0.6.3-beta
+          TARGET_SHA: 6d2d0dcb246abbd1a8dcbf34d8f34bbb6d90d502
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; nothing to do."
+            exit 0
+          fi
+
+          cat > /tmp/release-notes.md <<'EOF'
+          Canonical release baseline for the original standalone AD5X IFS Plugin for Spoolman.
+
+          Frozen source commit: `6d2d0dcb246abbd1a8dcbf34d8f34bbb6d90d502`.
+
+          This release line is intentionally separated from the later Filament Manager experiments and from the frontend-neutral IFS / Materials Manager work in `genrudko/Plugins_AD5X`. Those later experiments are not ancestors of this release and must not be merged into the standalone maintenance line.
+
+          Future bugfixes for the standalone Spoolman-integrated plugin must start from this release baseline (or its maintenance descendants), not from the experimental branches.
+          EOF
+
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "AD5X IFS Plugin for Spoolman v0.6.3-beta" \
+            --notes-file /tmp/release-notes.md \
+            --latest
