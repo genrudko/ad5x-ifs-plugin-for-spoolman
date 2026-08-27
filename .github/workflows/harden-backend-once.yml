@@ -1,0 +1,81 @@
+name: Harden standalone backend once
+
+on:
+  push:
+    branches:
+      - bugfix/standalone-0.6.4-beta
+    paths:
+      - .github/workflows/harden-backend-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bugfix/standalone-0.6.4-beta
+
+      - name: Apply bounded backend fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          backend = Path("plugin/ifs_spoolman.py")
+          text = backend.read_text(encoding="utf-8")
+
+          text = text.replace(
+              "import urllib.request\n",
+              "import urllib.parse\nimport urllib.request\n",
+              1,
+          )
+
+          helper = '''\ndef atomic_write_json(path, data):\n    tmp = path + ".tmp"\n    with open(tmp, "w", encoding="utf-8") as f:\n        json.dump(data, f, ensure_ascii=False, indent=2)\n        f.flush()\n        os.fsync(f.fileno())\n    os.replace(tmp, path)\n\n'''
+
+          anchor = "def first_existing(paths):\n"
+          if helper.strip() not in text[:2000]:
+              text = text.replace(anchor, helper + anchor, 1)
+
+          old_helper = '''def atomic_write_json(path, data):\n    tmp = path + ".tmp"\n    with open(tmp, "w", encoding="utf-8") as f:\n        json.dump(data, f, ensure_ascii=False, indent=2)\n        f.flush(); os.fsync(f.fileno())\n    os.replace(tmp, path)\n\n'''
+          text = text.replace(old_helper, "", 1)
+
+          text = text.replace(
+              'APP_VERSION = "0.5.0-beta"',
+              'APP_VERSION = "0.5.1-beta"',
+              1,
+          )
+          text = text.replace("v0.2.2 beta", "v0.5.1 beta")
+          text = text.replace(">0.2.2 beta<", ">0.5.1 beta<")
+          text = text.replace(
+              'server_version="IFS-Spoolman/0.1"',
+              'server_version="IFS-Spoolman/0.5.1-beta"',
+              1,
+          )
+
+          backend.write_text(text, encoding="utf-8")
+
+          legacy_ui = Path("plugin/ui_v0_2.html")
+          ui = legacy_ui.read_text(encoding="utf-8")
+          ui = ui.replace("v0.2.2 beta", "v0.5.1 beta")
+          ui = ui.replace(">0.2.2 beta<", ">0.5.1 beta<")
+          legacy_ui.write_text(ui, encoding="utf-8")
+          PY
+
+      - name: Verify bounded changes
+        run: |
+          python3 -m py_compile plugin/ifs_spoolman.py
+          rm -rf plugin/__pycache__
+          grep -F 'APP_VERSION = "0.5.1-beta"' plugin/ifs_spoolman.py
+          grep -F 'server_version="IFS-Spoolman/0.5.1-beta"' plugin/ifs_spoolman.py
+          ! grep -F '0.2.2 beta' plugin/ifs_spoolman.py
+
+      - name: Commit backend hardening
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add plugin/ifs_spoolman.py plugin/ui_v0_2.html
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(backend): harden startup and version metadata"
+          git push origin HEAD:bugfix/standalone-0.6.4-beta
