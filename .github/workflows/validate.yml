@@ -102,7 +102,7 @@ jobs:
           chmod +x "$SOURCE/scripts/start.sh"
 
           set +e
-          sudo "$SOURCE/update.sh"
+          sudo sh "$SOURCE/update.sh"
           RC=$?
           set -e
           test "$RC" -ne 0
