@@ -17,7 +17,7 @@ on:
         required: false
         type: string
       publish:
-        description: 'Publish the built ZIP to the rolling compatibility release'
+        description: 'Publish the built ZIP to the rolling compatibility channels'
         required: false
         default: false
         type: boolean
@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve upstream release and compatibility asset
+      - name: Resolve upstream release and compatibility channels
         id: meta
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,6 +46,7 @@ jobs:
           UPSTREAM_REPO="$(jq -r '.upstream_repository' native-fluidd/config.json)"
           PATCH_REVISION="$(jq -r '.patch_revision' native-fluidd/config.json)"
           DIST_RELEASE_TAG="$(jq -r '.distribution_release_tag' native-fluidd/config.json)"
+          RAW_BRANCH="fluidd-compatibility-files"
 
           if [ -n "${INPUT_UPSTREAM_TAG:-}" ]; then
             UPSTREAM_TAG="$INPUT_UPSTREAM_TAG"
@@ -58,6 +59,7 @@ jobs:
 
           ASSET_NAME="fluidd-${UPSTREAM_TAG}-ifs-ui-v${PATCH_REVISION}.zip"
           SHA_ASSET_NAME="${ASSET_NAME}.sha256"
+          RAW_PATH="${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}"
 
           PUBLISH_REQUESTED=false
           if [ "$EVENT_NAME" = "schedule" ]; then
@@ -68,11 +70,27 @@ jobs:
             PUBLISH_REQUESTED=true
           fi
 
-          ALREADY_PUBLISHED=false
-          if [ "$PUBLISH_REQUESTED" = "true" ] && gh release view "$DIST_RELEASE_TAG" >/dev/null 2>&1; then
-            if gh release view "$DIST_RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fx "$ASSET_NAME" >/dev/null 2>&1; then
-              ALREADY_PUBLISHED=true
+          RELEASE_PUBLISHED=false
+          RAW_PUBLISHED=false
+          if [ "$PUBLISH_REQUESTED" = "true" ]; then
+            if gh release view "$DIST_RELEASE_TAG" >/dev/null 2>&1; then
+              if gh release view "$DIST_RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fx "$ASSET_NAME" >/dev/null 2>&1; then
+                RELEASE_PUBLISHED=true
+              fi
             fi
+
+            if curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -o /dev/null \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/${RAW_PATH}/fluidd.zip?ref=${RAW_BRANCH}"; then
+              RAW_PUBLISHED=true
+            fi
+          fi
+
+          ALL_PUBLISHED=false
+          if [ "$RELEASE_PUBLISHED" = "true" ] && [ "$RAW_PUBLISHED" = "true" ]; then
+            ALL_PUBLISHED=true
           fi
 
           {
@@ -80,23 +98,28 @@ jobs:
             echo "upstream_tag=$UPSTREAM_TAG"
             echo "patch_revision=$PATCH_REVISION"
             echo "dist_release_tag=$DIST_RELEASE_TAG"
+            echo "raw_branch=$RAW_BRANCH"
+            echo "raw_path=$RAW_PATH"
             echo "asset_name=$ASSET_NAME"
             echo "sha_asset_name=$SHA_ASSET_NAME"
             echo "publish_requested=$PUBLISH_REQUESTED"
-            echo "already_published=$ALREADY_PUBLISHED"
+            echo "release_published=$RELEASE_PUBLISHED"
+            echo "raw_published=$RAW_PUBLISHED"
+            echo "all_published=$ALL_PUBLISHED"
           } >> "$GITHUB_OUTPUT"
 
           echo "Upstream: $UPSTREAM_REPO $UPSTREAM_TAG"
           echo "Asset: $ASSET_NAME"
           echo "Publish requested: $PUBLISH_REQUESTED"
-          echo "Already published: $ALREADY_PUBLISHED"
+          echo "Release published: $RELEASE_PUBLISHED"
+          echo "Raw published: $RAW_PUBLISHED"
 
-      - name: Stop early when daily compatibility asset already exists
-        if: steps.meta.outputs.already_published == 'true'
-        run: echo 'Compatibility asset already exists; no rebuild required.'
+      - name: Stop early when all compatibility channels already exist
+        if: steps.meta.outputs.all_published == 'true'
+        run: echo 'Compatibility files already exist in release and raw channels; no rebuild required.'
 
       - name: Clone exact Sergey Fluidd release
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         run: |
           set -eu
           git clone --depth 1 --branch "${{ steps.meta.outputs.upstream_tag }}" \
@@ -106,7 +129,7 @@ jobs:
           git rev-parse HEAD | tee ../upstream-fluidd.commit
 
       - name: Apply native AD5X IFS overlay
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         run: |
           set -eu
           python3 native-fluidd/apply_overlay.py upstream-fluidd
@@ -116,31 +139,31 @@ jobs:
           grep -F "ad5x_ifs:" upstream-fluidd/src/locales/ru.yaml >/dev/null
 
       - uses: actions/setup-node@v4
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         with:
           node-version: '24'
 
       - name: Enable pinned pnpm
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         run: corepack enable
 
       - name: Install Fluidd dependencies
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         working-directory: upstream-fluidd
         run: pnpm install --frozen-lockfile
 
       - name: Type-check native Fluidd build
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         working-directory: upstream-fluidd
         run: pnpm run type-check
 
       - name: Build native Fluidd distribution
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         working-directory: upstream-fluidd
         run: pnpm run build
 
       - name: Verify upstream identity and write compatibility marker
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         env:
           UPSTREAM_REPO: ${{ steps.meta.outputs.upstream_repo }}
           UPSTREAM_TAG: ${{ steps.meta.outputs.upstream_tag }}
@@ -171,7 +194,7 @@ jobs:
           cat upstream-fluidd/dist/ad5x_ifs_native.json
 
       - name: Package compatibility ZIP
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         env:
           ASSET_NAME: ${{ steps.meta.outputs.asset_name }}
           SHA_ASSET_NAME: ${{ steps.meta.outputs.sha_asset_name }}
@@ -190,7 +213,7 @@ jobs:
           unzip -p "out/$ASSET_NAME" .version | grep -Fx "${{ steps.meta.outputs.upstream_tag }}" >/dev/null
 
       - name: Upload CI artifact
-        if: steps.meta.outputs.already_published != 'true'
+        if: steps.meta.outputs.all_published != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: native-fluidd-${{ steps.meta.outputs.upstream_tag }}-ifs-ui-v${{ steps.meta.outputs.patch_revision }}
@@ -201,7 +224,7 @@ jobs:
           retention-days: 14
 
       - name: Ensure rolling compatibility release exists
-        if: steps.meta.outputs.already_published != 'true' && steps.meta.outputs.publish_requested == 'true'
+        if: steps.meta.outputs.all_published != 'true' && steps.meta.outputs.publish_requested == 'true' && steps.meta.outputs.release_published != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           DIST_RELEASE_TAG: ${{ steps.meta.outputs.dist_release_tag }}
@@ -214,8 +237,8 @@ jobs:
               --notes "Native Fluidd builds generated from exact ghzserg/fluidd releases with the standalone AD5X IFS dashboard component applied. This is a rolling compatibility-asset channel, not a replacement Fluidd fork."
           fi
 
-      - name: Publish compatibility assets
-        if: steps.meta.outputs.already_published != 'true' && steps.meta.outputs.publish_requested == 'true'
+      - name: Publish compatibility release assets
+        if: steps.meta.outputs.all_published != 'true' && steps.meta.outputs.publish_requested == 'true' && steps.meta.outputs.release_published != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           DIST_RELEASE_TAG: ${{ steps.meta.outputs.dist_release_tag }}
@@ -226,3 +249,40 @@ jobs:
           gh release upload "$DIST_RELEASE_TAG" \
             "out/$ASSET_NAME" \
             "out/$SHA_ASSET_NAME"
+
+      - name: Publish raw compatibility files
+        if: steps.meta.outputs.all_published != 'true' && steps.meta.outputs.publish_requested == 'true' && steps.meta.outputs.raw_published != 'true'
+        env:
+          RAW_BRANCH: ${{ steps.meta.outputs.raw_branch }}
+          RAW_PATH: ${{ steps.meta.outputs.raw_path }}
+          ASSET_NAME: ${{ steps.meta.outputs.asset_name }}
+        run: |
+          set -eu
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          rm -rf raw-channel
+          if git fetch origin "$RAW_BRANCH"; then
+            git worktree add --detach raw-channel "origin/$RAW_BRANCH"
+          else
+            git worktree add --detach raw-channel
+            (
+              cd raw-channel
+              git checkout --orphan "$RAW_BRANCH"
+              git rm -rf . >/dev/null 2>&1 || true
+            )
+          fi
+
+          mkdir -p "raw-channel/$RAW_PATH"
+          cp "out/$ASSET_NAME" "raw-channel/$RAW_PATH/fluidd.zip"
+          SHA="$(sha256sum "out/$ASSET_NAME" | awk '{print $1}')"
+          printf '%s  fluidd.zip\n' "$SHA" > "raw-channel/$RAW_PATH/fluidd.zip.sha256"
+
+          git -C raw-channel add "$RAW_PATH/fluidd.zip" "$RAW_PATH/fluidd.zip.sha256"
+          if git -C raw-channel diff --cached --quiet; then
+            echo 'Raw compatibility files are already identical.'
+          else
+            git -C raw-channel commit -m "dist: add Fluidd ${{ steps.meta.outputs.upstream_tag }} IFS UI v${{ steps.meta.outputs.patch_revision }}"
+            git -C raw-channel push origin HEAD:"$RAW_BRANCH"
+          fi
