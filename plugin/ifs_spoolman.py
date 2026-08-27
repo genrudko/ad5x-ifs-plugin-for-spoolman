@@ -5,8 +5,18 @@ from logging.handlers import RotatingFileHandler
 import os
 import threading
 import time
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+def atomic_write_json(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
 
 def first_existing(paths):
     for path in paths:
@@ -25,7 +35,7 @@ FF_CONFIG = first_existing([
     "/root/printer_data/config/Adventurer5M.json",
 ])
 # IFS_SPOOLMAN_CONFIG_V0_3
-APP_VERSION = "0.5.0-beta"
+APP_VERSION = "0.5.1-beta"
 CONFIG_SCHEMA_VERSION = 1
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
 
@@ -1283,7 +1293,7 @@ h1 {
           Привязка физических каналов IFS к катушкам Spoolman
           и автоматическая синхронизация активного филамента.
         </div>
-        <div class="version-badge">v0.2.2 beta</div>
+        <div class="version-badge">v0.5.1 beta</div>
       </div>
     </div>
 
@@ -1389,7 +1399,7 @@ h1 {
 
       <div class="diag-item">
         <span>Версия интерфейса</span>
-        <span>0.2.2 beta</span>
+        <span>0.5.1 beta</span>
       </div>
     </div>
   </details>
@@ -2246,13 +2256,6 @@ setInterval(() => {
 </html>
 '''
 
-def atomic_write_json(path, data):
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.flush(); os.fsync(f.fileno())
-    os.replace(tmp, path)
-
 def load_assignments():
     global assignments
     try:
@@ -3069,7 +3072,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
-    server_version="IFS-Spoolman/0.1"
+    server_version="IFS-Spoolman/0.5.1-beta"
     def log_message(self,fmt,*args): print("%s - %s"%(self.address_string(),fmt%args),flush=True)
     def send_json(self,status,value):
         raw=json.dumps(value,ensure_ascii=False).encode("utf-8"); self.send_response(status); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Content-Length",str(len(raw))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(raw)
