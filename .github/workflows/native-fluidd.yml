@@ -1,0 +1,225 @@
+name: Native Fluidd compatibility
+
+on:
+  push:
+    branches:
+      - feature/native-fluidd-ui-v1
+    paths:
+      - 'native-fluidd/**'
+      - '.github/workflows/native-fluidd.yml'
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Optional ghzserg/fluidd release tag (for example v1.37.4)'
+        required: false
+        type: string
+      publish:
+        description: 'Publish the built ZIP to the rolling compatibility release'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-native-fluidd:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve upstream release and compatibility asset
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -eu
+
+          UPSTREAM_REPO="$(jq -r '.upstream_repository' native-fluidd/config.json)"
+          PATCH_REVISION="$(jq -r '.patch_revision' native-fluidd/config.json)"
+          DIST_RELEASE_TAG="$(jq -r '.distribution_release_tag' native-fluidd/config.json)"
+
+          if [ -n "${INPUT_UPSTREAM_TAG:-}" ]; then
+            UPSTREAM_TAG="$INPUT_UPSTREAM_TAG"
+          else
+            UPSTREAM_TAG="$(curl -fsSL "https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest" | jq -r '.tag_name')"
+          fi
+
+          test -n "$UPSTREAM_TAG"
+          test "$UPSTREAM_TAG" != "null"
+
+          ASSET_NAME="fluidd-${UPSTREAM_TAG}-ifs-ui-v${PATCH_REVISION}.zip"
+          SHA_ASSET_NAME="${ASSET_NAME}.sha256"
+
+          PUBLISH_REQUESTED=false
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            PUBLISH_REQUESTED=true
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "${INPUT_PUBLISH:-false}" = "true" ]; then
+            PUBLISH_REQUESTED=true
+          fi
+
+          ALREADY_PUBLISHED=false
+          if [ "$PUBLISH_REQUESTED" = "true" ] && gh release view "$DIST_RELEASE_TAG" >/dev/null 2>&1; then
+            if gh release view "$DIST_RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fx "$ASSET_NAME" >/dev/null 2>&1; then
+              ALREADY_PUBLISHED=true
+            fi
+          fi
+
+          {
+            echo "upstream_repo=$UPSTREAM_REPO"
+            echo "upstream_tag=$UPSTREAM_TAG"
+            echo "patch_revision=$PATCH_REVISION"
+            echo "dist_release_tag=$DIST_RELEASE_TAG"
+            echo "asset_name=$ASSET_NAME"
+            echo "sha_asset_name=$SHA_ASSET_NAME"
+            echo "publish_requested=$PUBLISH_REQUESTED"
+            echo "already_published=$ALREADY_PUBLISHED"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Upstream: $UPSTREAM_REPO $UPSTREAM_TAG"
+          echo "Asset: $ASSET_NAME"
+          echo "Publish requested: $PUBLISH_REQUESTED"
+          echo "Already published: $ALREADY_PUBLISHED"
+
+      - name: Stop early when daily compatibility asset already exists
+        if: steps.meta.outputs.already_published == 'true'
+        run: echo 'Compatibility asset already exists; no rebuild required.'
+
+      - name: Clone exact Sergey Fluidd release
+        if: steps.meta.outputs.already_published != 'true'
+        run: |
+          set -eu
+          git clone --depth 1 --branch "${{ steps.meta.outputs.upstream_tag }}" \
+            "https://github.com/${{ steps.meta.outputs.upstream_repo }}.git" \
+            upstream-fluidd
+          cd upstream-fluidd
+          git rev-parse HEAD | tee ../upstream-fluidd.commit
+
+      - name: Apply native AD5X IFS overlay
+        if: steps.meta.outputs.already_published != 'true'
+        run: |
+          set -eu
+          python3 native-fluidd/apply_overlay.py upstream-fluidd
+          grep -F "Ad5xIfsCard" upstream-fluidd/src/views/Dashboard.vue >/dev/null
+          grep -F "ad5x-ifs-card" upstream-fluidd/src/store/layout/state.ts >/dev/null
+          grep -F "ad5x_ifs:" upstream-fluidd/src/locales/en.yaml >/dev/null
+          grep -F "ad5x_ifs:" upstream-fluidd/src/locales/ru.yaml >/dev/null
+
+      - uses: actions/setup-node@v4
+        if: steps.meta.outputs.already_published != 'true'
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: upstream-fluidd/pnpm-lock.yaml
+
+      - name: Enable pinned pnpm
+        if: steps.meta.outputs.already_published != 'true'
+        run: corepack enable
+
+      - name: Install Fluidd dependencies
+        if: steps.meta.outputs.already_published != 'true'
+        working-directory: upstream-fluidd
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check native Fluidd build
+        if: steps.meta.outputs.already_published != 'true'
+        working-directory: upstream-fluidd
+        run: pnpm run type-check
+
+      - name: Build native Fluidd distribution
+        if: steps.meta.outputs.already_published != 'true'
+        working-directory: upstream-fluidd
+        run: pnpm run build
+
+      - name: Verify upstream identity and write compatibility marker
+        if: steps.meta.outputs.already_published != 'true'
+        env:
+          UPSTREAM_REPO: ${{ steps.meta.outputs.upstream_repo }}
+          UPSTREAM_TAG: ${{ steps.meta.outputs.upstream_tag }}
+          PATCH_REVISION: ${{ steps.meta.outputs.patch_revision }}
+        run: |
+          set -eu
+          UPSTREAM_SHA="$(cat upstream-fluidd.commit)"
+
+          test "$(cat upstream-fluidd/dist/.version)" = "$UPSTREAM_TAG"
+          test "$(jq -r '.project_owner' upstream-fluidd/dist/release_info.json)" = "ghzserg"
+          test "$(jq -r '.project_name' upstream-fluidd/dist/release_info.json)" = "fluidd"
+          test "$(jq -r '.version' upstream-fluidd/dist/release_info.json)" = "$UPSTREAM_TAG"
+
+          jq -n \
+            --arg integration "ad5x-ifs-native" \
+            --arg upstream_repository "$UPSTREAM_REPO" \
+            --arg upstream_tag "$UPSTREAM_TAG" \
+            --arg upstream_commit "$UPSTREAM_SHA" \
+            --argjson patch_revision "$PATCH_REVISION" \
+            '{
+              integration: $integration,
+              upstream_repository: $upstream_repository,
+              upstream_tag: $upstream_tag,
+              upstream_commit: $upstream_commit,
+              patch_revision: $patch_revision
+            }' > upstream-fluidd/dist/ad5x_ifs_native.json
+
+          cat upstream-fluidd/dist/ad5x_ifs_native.json
+
+      - name: Package compatibility ZIP
+        if: steps.meta.outputs.already_published != 'true'
+        env:
+          ASSET_NAME: ${{ steps.meta.outputs.asset_name }}
+          SHA_ASSET_NAME: ${{ steps.meta.outputs.sha_asset_name }}
+        run: |
+          set -eu
+          mkdir -p out
+          (
+            cd upstream-fluidd/dist
+            zip -qr "../../out/$ASSET_NAME" .
+          )
+          (
+            cd out
+            sha256sum "$ASSET_NAME" > "$SHA_ASSET_NAME"
+          )
+          unzip -l "out/$ASSET_NAME" | grep -F 'ad5x_ifs_native.json' >/dev/null
+          unzip -p "out/$ASSET_NAME" .version | grep -Fx "${{ steps.meta.outputs.upstream_tag }}" >/dev/null
+
+      - name: Upload CI artifact
+        if: steps.meta.outputs.already_published != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-fluidd-${{ steps.meta.outputs.upstream_tag }}-ifs-ui-v${{ steps.meta.outputs.patch_revision }}
+          path: |
+            out/${{ steps.meta.outputs.asset_name }}
+            out/${{ steps.meta.outputs.sha_asset_name }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Ensure rolling compatibility release exists
+        if: steps.meta.outputs.already_published != 'true' && steps.meta.outputs.publish_requested == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIST_RELEASE_TAG: ${{ steps.meta.outputs.dist_release_tag }}
+        run: |
+          set -eu
+          if ! gh release view "$DIST_RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$DIST_RELEASE_TAG" \
+              --title "Native Fluidd compatibility builds" \
+              --notes "Native Fluidd builds generated from exact ghzserg/fluidd releases with the standalone AD5X IFS dashboard component applied. This is a rolling compatibility-asset channel, not a replacement Fluidd fork."
+          fi
+
+      - name: Publish compatibility assets
+        if: steps.meta.outputs.already_published != 'true' && steps.meta.outputs.publish_requested == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIST_RELEASE_TAG: ${{ steps.meta.outputs.dist_release_tag }}
+          ASSET_NAME: ${{ steps.meta.outputs.asset_name }}
+          SHA_ASSET_NAME: ${{ steps.meta.outputs.sha_asset_name }}
+        run: |
+          set -eu
+          gh release upload "$DIST_RELEASE_TAG" \
+            "out/$ASSET_NAME" \
+            "out/$SHA_ASSET_NAME"
