@@ -54,11 +54,19 @@ install_hook() {
     cat >>"$POWER_ON" <<'EOF'
 
 # >>> AD5X IFS Plugin for Spoolman >>>
-AD5X_IFS_START="/usr/data/config/mod_data/ifs_spoolman/start.sh"
-AD5X_IFS_BOOT_LOG="/usr/data/config/mod_data/ifs_spoolman/boot.log"
-if [ -x "$AD5X_IFS_START" ]; then
+AD5X_IFS_BASE=""
+for AD5X_IFS_CANDIDATE in /usr/data/config /opt/config; do
+    if [ -x "$AD5X_IFS_CANDIDATE/mod_data/ifs_spoolman/start.sh" ]; then
+        AD5X_IFS_BASE="$AD5X_IFS_CANDIDATE"
+        break
+    fi
+done
+if [ -n "$AD5X_IFS_BASE" ]; then
+    AD5X_IFS_START="$AD5X_IFS_BASE/mod_data/ifs_spoolman/start.sh"
+    AD5X_IFS_BOOT_LOG="$AD5X_IFS_BASE/mod_data/ifs_spoolman/boot.log"
     "$AD5X_IFS_START" >>"$AD5X_IFS_BOOT_LOG" 2>&1 &
 fi
+unset AD5X_IFS_CANDIDATE AD5X_IFS_START AD5X_IFS_BOOT_LOG AD5X_IFS_BASE
 # <<< AD5X IFS Plugin for Spoolman <<<
 EOF
 
