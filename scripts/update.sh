@@ -35,6 +35,8 @@ ifs-spoolman-visibility.js
 ifs-spoolman-selection.js
 install_fluidd_card.sh
 uninstall_fluidd_card.sh
+install_fluidd_native.sh
+restore_fluidd_native.sh
 power_on_hook.sh
 boot_start.sh
 start.sh
