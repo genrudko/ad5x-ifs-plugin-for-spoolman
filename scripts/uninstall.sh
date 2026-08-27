@@ -39,6 +39,13 @@ if [ "$CONFIRMED" -ne 1 ]; then
     exit 2
 fi
 
+if [ -x "$APP_DIR/power_on_hook.sh" ]; then
+    "$APP_DIR/power_on_hook.sh" remove || {
+        echo "$APP_NAME: не удалось безопасно удалить блок автозапуска." >&2
+        exit 1
+    }
+fi
+
 "$APP_DIR/stop.sh" || true
 
 MOON_PID=""
@@ -80,7 +87,10 @@ if [ "$PURGE" -eq 0 ]; then
         events.log \
         events.log.1 \
         events.log.2 \
-        events.log.3
+        events.log.3 \
+        ifs_spoolman.log \
+        fluidd_card.log \
+        boot.log
     do
         [ -f "$APP_DIR/$FILE" ] || continue
         cp "$APP_DIR/$FILE" "$DATA_BACKUP/$FILE"
