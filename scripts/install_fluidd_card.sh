@@ -57,6 +57,7 @@ cp "$SELECTION_SOURCE" "$SELECTION_TARGET"
     "$LAYOUT_TARGET_NAME" \
     "$DASHBOARD_TARGET_NAME" \
     "$SELECTION_TARGET_NAME" <<'PY'
+import os
 import re
 import sys
 from pathlib import Path
@@ -95,7 +96,10 @@ text = text.replace(
     1,
 )
 
-index_path.write_text(text, encoding="utf-8")
+tmp_path = index_path.with_name(index_path.name + ".ifs-spoolman.tmp")
+tmp_path.write_text(text, encoding="utf-8")
+os.chmod(tmp_path, index_path.stat().st_mode)
+os.replace(tmp_path, index_path)
 PY
 
 for PATTERN in card layout visibility dashboard selection controls; do
