@@ -27,9 +27,70 @@ fail() {
     exit 1
 }
 
+legacy_present() {
+    LEGACY_DIR="$1"
+    [ -d "$LEGACY_DIR" ] || return 1
+
+    if [ -f "$LEGACY_DIR/index.html" ] &&
+        grep -Eq 'ifs-spoolman-(card|layout|visibility|dashboard|selection|controls)' \
+            "$LEGACY_DIR/index.html"
+    then
+        return 0
+    fi
+
+    for LEGACY_FILE in \
+        "$LEGACY_DIR"/ifs-spoolman-card*.js \
+        "$LEGACY_DIR"/ifs-spoolman-layout*.js \
+        "$LEGACY_DIR"/ifs-spoolman-dashboard*.js \
+        "$LEGACY_DIR"/ifs-spoolman-selection*.js \
+        "$LEGACY_DIR"/ifs-spoolman-visibility*.js \
+        "$LEGACY_DIR"/ifs-spoolman-controls*.js
+    do
+        [ -e "$LEGACY_FILE" ] && return 0
+    done
+
+    return 1
+}
+
+clean_legacy_dir() {
+    CLEAN_DIR="$1"
+    [ -d "$CLEAN_DIR" ] || return 0
+
+    CLEAN_INDEX="$CLEAN_DIR/index.html"
+    if [ -f "$CLEAN_INDEX" ] &&
+        grep -Eq 'ifs-spoolman-(card|layout|visibility|dashboard|selection|controls)' \
+            "$CLEAN_INDEX"
+    then
+        CLEAN_TMP="$CLEAN_INDEX.ifs-native-clean.$$"
+        CLEAN_MODE="$(stat -c '%a' "$CLEAN_INDEX")"
+
+        if ! awk '
+            /<script/ && /ifs-spoolman-(card|layout|visibility|dashboard|selection|controls)/ { next }
+            { print }
+        ' "$CLEAN_INDEX" >"$CLEAN_TMP"
+        then
+            rm -f "$CLEAN_TMP"
+            return 1
+        fi
+
+        chmod "$CLEAN_MODE" "$CLEAN_TMP"
+        mv "$CLEAN_TMP" "$CLEAN_INDEX"
+    fi
+
+    rm -f \
+        "$CLEAN_DIR"/ifs-spoolman-card*.js \
+        "$CLEAN_DIR"/ifs-spoolman-layout*.js \
+        "$CLEAN_DIR"/ifs-spoolman-dashboard*.js \
+        "$CLEAN_DIR"/ifs-spoolman-selection*.js \
+        "$CLEAN_DIR"/ifs-spoolman-visibility*.js \
+        "$CLEAN_DIR"/ifs-spoolman-controls*.js 2>/dev/null || true
+
+    ! legacy_present "$CLEAN_DIR"
+}
+
 [ "$(id -u)" = "0" ] || fail "run this script over SSH as root"
 
-for CMD in wget sha256sum unzip grep mv rm mkdir cat awk; do
+for CMD in wget sha256sum unzip grep mv rm mkdir cat awk stat chmod; do
     command -v "$CMD" >/dev/null 2>&1 || fail "required host command not found: $CMD"
 done
 
@@ -69,7 +130,15 @@ if [ -f "$FLUIDD_DIR/ad5x_ifs_native.json" ]; then
         && grep -F '"upstream_tag": "'"$UPSTREAM_TAG"'"' \
         "$FLUIDD_DIR/ad5x_ifs_native.json" >/dev/null 2>&1
     then
+        clean_legacy_dir "$FLUIDD_DIR" \
+            || fail "cannot remove legacy Fluidd injection from active native build"
+        clean_legacy_dir "$PREVIOUS_DIR" \
+            || fail "cannot remove legacy Fluidd injection from rollback snapshot"
+        legacy_present "$FLUIDD_DIR" \
+            && fail "legacy Fluidd injection is still present after cleanup"
+
         echo "AD5X IFS native Fluidd already installed: $UPSTREAM_TAG / patch $PATCH_REVISION"
+        echo "Legacy Fluidd injection: clean"
         exit 0
     fi
 fi
@@ -107,6 +176,9 @@ grep -F '"upstream_repository": "ghzserg/fluidd"' "$NEW_DIR/ad5x_ifs_native.json
 grep -F '"upstream_tag": "'"$UPSTREAM_TAG"'"' "$NEW_DIR/ad5x_ifs_native.json" >/dev/null || fail "wrong upstream tag marker"
 grep -Eq '"patch_revision"[[:space:]]*:[[:space:]]*'"$PATCH_REVISION"'([[:space:],}]|$)' "$NEW_DIR/ad5x_ifs_native.json" || fail "wrong patch revision marker"
 
+clean_legacy_dir "$NEW_DIR" \
+    || fail "native compatibility build contains legacy Fluidd injection"
+
 rollback_swap() {
     if [ -d "$FLUIDD_DIR" ]; then
         rm -rf "$FLUIDD_DIR.failed" 2>/dev/null || true
@@ -124,9 +196,19 @@ rollback_swap() {
 
 if [ "$CURRENT_NATIVE" -eq 1 ]; then
     mv "$FLUIDD_DIR" "$OLD_NATIVE_DIR" || fail "cannot stage current native Fluidd"
+
+    if ! clean_legacy_dir "$PREVIOUS_DIR"; then
+        mv "$OLD_NATIVE_DIR" "$FLUIDD_DIR" 2>/dev/null || true
+        fail "cannot clean legacy Fluidd injection from rollback snapshot"
+    fi
 else
     rm -rf "$PREVIOUS_DIR"
     mv "$FLUIDD_DIR" "$PREVIOUS_DIR" || fail "cannot preserve current Fluidd for rollback"
+
+    if ! clean_legacy_dir "$PREVIOUS_DIR"; then
+        mv "$PREVIOUS_DIR" "$FLUIDD_DIR" 2>/dev/null || true
+        fail "cannot clean legacy Fluidd injection from rollback snapshot"
+    fi
 fi
 
 if ! mv "$NEW_DIR" "$FLUIDD_DIR"; then
@@ -139,18 +221,17 @@ if [ ! -f "$FLUIDD_DIR/index.html" ] || [ ! -f "$FLUIDD_DIR/ad5x_ifs_native.json
     fail "post-install validation failed; previous Fluidd restored"
 fi
 
+if legacy_present "$FLUIDD_DIR"; then
+    rollback_swap
+    fail "post-install validation found legacy Fluidd injection; previous Fluidd restored"
+fi
+
 if [ "$CURRENT_NATIVE" -eq 1 ]; then
     rm -rf "$OLD_NATIVE_DIR"
 fi
 
-rm -f "$FLUIDD_DIR"/ifs-spoolman-card*.js \
-      "$FLUIDD_DIR"/ifs-spoolman-layout*.js \
-      "$FLUIDD_DIR"/ifs-spoolman-dashboard*.js \
-      "$FLUIDD_DIR"/ifs-spoolman-selection*.js \
-      "$FLUIDD_DIR"/ifs-spoolman-visibility*.js \
-      "$FLUIDD_DIR"/ifs-spoolman-controls*.js 2>/dev/null || true
-
 echo "AD5X IFS native Fluidd installed successfully."
 echo "Fluidd identity: ghzserg/fluidd $UPSTREAM_TAG"
 echo "Native patch revision: $PATCH_REVISION"
+echo "Legacy Fluidd injection: clean"
 echo "Rollback snapshot: /root/fluidd.ifs-previous"
