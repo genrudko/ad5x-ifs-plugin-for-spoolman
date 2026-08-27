@@ -31,6 +31,7 @@ See the [mandatory Spoolman setup guide](docs/spoolman.md).
 - Adds an **AD5X IFS** card and layout controls to Fluidd.
 - Exposes status, configuration and health API endpoints.
 - Writes a rotating structured event log.
+- Registers a Z-Mod-native startup hook in user-managed `mod_data/power_on.sh` without replacing unrelated user content.
 - Includes install, update, status and uninstall scripts.
 
 ## Requirements
@@ -47,7 +48,7 @@ See the [mandatory Spoolman setup guide](docs/spoolman.md).
 Connect over SSH as `root` and run:
 
 ```sh
-rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/release/standalone-0.6.x/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
 
 The `?cb=$(date +%s)` parameter prevents an old cached installer from being returned.
@@ -55,9 +56,11 @@ The `?cb=$(date +%s)` parameter prevents an old cached installer from being retu
 The helper:
 
 - verifies Moonraker and Spoolman;
+- downloads only files from the `release/standalone-0.6.x` maintenance line;
 - downloads only the required files directly from `raw.githubusercontent.com`;
 - does not require git or `codeload.github.com`;
 - adds cache-busting to every downloaded file;
+- registers an idempotent startup block in `mod_data/power_on.sh` while preserving surrounding user code;
 - installs a new copy through `install.sh`;
 - updates an existing copy through `update.sh`, including backup, health check, and automatic rollback.
 
@@ -77,9 +80,11 @@ Detailed instructions: [docs/installation.md](docs/installation.md).
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
+`status.sh` also checks the Z-Mod startup hook, backend PID ownership, HTTP API, and all four injected Fluidd components.
+
 ## Manual update
 
-From a refreshed checkout:
+From a refreshed checkout of **`release/standalone-0.6.x`**:
 
 ```sh
 ./update.sh --dry-run
@@ -90,7 +95,7 @@ The updater creates a timestamped backup and rolls back automatically if startup
 
 ## Uninstall
 
-Keep user data in a separate backup directory:
+Keep user data and diagnostic logs in a separate backup directory:
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes
@@ -102,10 +107,12 @@ Permanently remove plugin data:
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes --purge
 ```
 
+Uninstall removes only the plugin-managed block from `mod_data/power_on.sh`; unrelated user code is preserved.
+
 ## Versions
 
-- Package/tooling: `0.6.0-beta`
-- Backend: `0.5.0-beta`
+- Package/tooling: `0.6.4-beta`
+- Backend: `0.5.1-beta`
 
 ## Documentation
 
