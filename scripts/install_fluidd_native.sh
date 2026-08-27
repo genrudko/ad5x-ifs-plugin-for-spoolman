@@ -2,9 +2,10 @@
 set -eu
 
 APP_NAME="AD5X IFS Plugin for Spoolman"
-ROLLING_TAG="fluidd-compatibility"
 PATCH_REVISION="${AD5X_IFS_FLUIDD_PATCH_REVISION:-1}"
 REPO="genrudko/ad5x-ifs-plugin-for-spoolman"
+RAW_BRANCH="fluidd-compatibility-files"
+CACHE_BUSTER="$(date +%s 2>/dev/null || echo "$$")-$$"
 
 find_moonraker_pid() {
     for P in /proc/[0-9]*; do
@@ -28,7 +29,7 @@ fail() {
 
 [ "$(id -u)" = "0" ] || fail "run this script over SSH as root"
 
-for CMD in sha256sum unzip grep mv rm mkdir cat awk chroot; do
+for CMD in wget sha256sum unzip grep mv rm mkdir cat awk; do
     command -v "$CMD" >/dev/null 2>&1 || fail "required host command not found: $CMD"
 done
 
@@ -38,75 +39,16 @@ MOON_PID="$(find_moonraker_pid 2>/dev/null || true)"
 ROOT="/proc/$MOON_PID/root"
 FLUIDD_DIR="$ROOT/root/fluidd"
 PREVIOUS_DIR="$ROOT/root/fluidd.ifs-previous"
-INNER_WORK_DIR="/root/.ad5x-ifs-native-fluidd.$$"
-WORK_DIR="$ROOT$INNER_WORK_DIR"
+WORK_DIR="$ROOT/root/.ad5x-ifs-native-fluidd.$$"
 NEW_DIR="$WORK_DIR/new"
 ZIP_FILE="$WORK_DIR/fluidd.zip"
 SHA_FILE="$WORK_DIR/fluidd.zip.sha256"
 OLD_NATIVE_DIR="$WORK_DIR/old-native"
-PYTHON_INNER="/root/moonraker-env/bin/python3"
-PYTHON_HOST="$ROOT$PYTHON_INNER"
 
 cleanup() {
     rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT HUP INT TERM
-
-python_download() {
-    URL="$1"
-    INNER_DEST="$2"
-
-    [ -x "$PYTHON_HOST" ] || return 1
-
-    chroot "$ROOT" "$PYTHON_INNER" - "$URL" "$INNER_DEST" <<'PY'
-import ssl
-import sys
-import urllib.request
-
-url, dest = sys.argv[1], sys.argv[2]
-
-
-def fetch(context):
-    request = urllib.request.Request(url, headers={"User-Agent": "AD5X-IFS-native-fluidd/1"})
-    with urllib.request.urlopen(request, context=context, timeout=180) as response:
-        with open(dest, "wb") as output:
-            while True:
-                chunk = response.read(1024 * 128)
-                if not chunk:
-                    break
-                output.write(chunk)
-
-
-try:
-    fetch(ssl.create_default_context())
-except Exception as first_error:
-    # Some Z-Mod images do not ship a usable CA bundle. The downloaded archive
-    # is authenticated separately by SHA256 before it is ever activated.
-    try:
-        fetch(ssl._create_unverified_context())
-    except Exception as second_error:
-        sys.stderr.write("Python HTTPS download failed: %s; fallback failed: %s\n" % (first_error, second_error))
-        raise
-PY
-}
-
-download_file() {
-    URL="$1"
-    HOST_DEST="$2"
-    INNER_DEST="$3"
-
-    rm -f "$HOST_DEST"
-
-    if command -v wget >/dev/null 2>&1; then
-        if wget -qO "$HOST_DEST" "$URL"; then
-            return 0
-        fi
-        rm -f "$HOST_DEST"
-        echo "AD5X IFS native Fluidd: BusyBox wget failed, retrying with Moonraker Python..." >&2
-    fi
-
-    python_download "$URL" "$INNER_DEST"
-}
 
 [ -d "$FLUIDD_DIR" ] || fail "Fluidd directory not found inside Moonraker root"
 [ -f "$FLUIDD_DIR/.version" ] || fail "Fluidd .version is missing"
@@ -117,8 +59,7 @@ case "$UPSTREAM_TAG" in
     *) fail "unsupported Fluidd version value: $UPSTREAM_TAG" ;;
 esac
 
-ASSET_NAME="fluidd-${UPSTREAM_TAG}-ifs-ui-v${PATCH_REVISION}.zip"
-BASE_URL="https://github.com/${REPO}/releases/download/${ROLLING_TAG}"
+RAW_BASE="https://raw.githubusercontent.com/${REPO}/${RAW_BRANCH}/${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}"
 
 CURRENT_NATIVE=0
 if [ -f "$FLUIDD_DIR/ad5x_ifs_native.json" ]; then
@@ -137,17 +78,20 @@ mkdir -p "$WORK_DIR" "$NEW_DIR"
 
 echo "Fluidd upstream: $UPSTREAM_TAG"
 echo "Native IFS UI patch: $PATCH_REVISION"
-echo "Downloading: $ASSET_NAME"
+echo "Transport: raw.githubusercontent.com"
+echo "Downloading native Fluidd compatibility build..."
 
-download_file "$BASE_URL/$ASSET_NAME" "$ZIP_FILE" "$INNER_WORK_DIR/fluidd.zip" \
-    || fail "cannot download compatible native Fluidd build"
-download_file "$BASE_URL/$ASSET_NAME.sha256" "$SHA_FILE" "$INNER_WORK_DIR/fluidd.zip.sha256" \
-    || fail "cannot download checksum file"
+wget -qO "$ZIP_FILE" "$RAW_BASE/fluidd.zip?cb=$CACHE_BUSTER" \
+    || fail "raw compatibility build is not published yet or cannot be downloaded"
+wget -qO "$SHA_FILE" "$RAW_BASE/fluidd.zip.sha256?cb=$CACHE_BUSTER" \
+    || fail "raw compatibility checksum is unavailable"
 
 EXPECTED_SHA="$(awk '{print $1; exit}' "$SHA_FILE")"
 [ -n "$EXPECTED_SHA" ] || fail "empty checksum file"
 ACTUAL_SHA="$(sha256sum "$ZIP_FILE" | awk '{print $1}')"
 [ "$ACTUAL_SHA" = "$EXPECTED_SHA" ] || fail "SHA256 mismatch"
+
+echo "SHA256: verified"
 
 unzip -q "$ZIP_FILE" -d "$NEW_DIR" || fail "cannot unpack compatibility ZIP"
 
