@@ -21,28 +21,24 @@ find_moonraker_pid() {
     return 1
 }
 
-[ "$(id -u)" = "0" ] || {
-    echo "$APP_NAME: run this script over SSH as root." >&2
+fail() {
+    echo "AD5X IFS native Fluidd: $*" >&2
     exit 1
 }
+
+[ "$(id -u)" = "0" ] || fail "run this script over SSH as root"
+
+for CMD in wget sha256sum unzip grep mv rm mkdir cat awk; do
+    command -v "$CMD" >/dev/null 2>&1 || fail "required host command not found: $CMD"
+done
 
 MOON_PID="$(find_moonraker_pid 2>/dev/null || true)"
-[ -n "$MOON_PID" ] || {
-    echo "$APP_NAME: Moonraker process/chroot not found." >&2
-    exit 1
-}
+[ -n "$MOON_PID" ] || fail "Moonraker process/chroot not found"
 
 ROOT="/proc/$MOON_PID/root"
-
-chroot "$ROOT" /bin/sh -s -- "$REPO" "$ROLLING_TAG" "$PATCH_REVISION" <<'INNER'
-set -eu
-
-REPO="$1"
-ROLLING_TAG="$2"
-PATCH_REVISION="$3"
-FLUIDD_DIR="/root/fluidd"
-PREVIOUS_DIR="/root/fluidd.ifs-previous"
-WORK_DIR="/root/.ad5x-ifs-native-fluidd.$$"
+FLUIDD_DIR="$ROOT/root/fluidd"
+PREVIOUS_DIR="$ROOT/root/fluidd.ifs-previous"
+WORK_DIR="$ROOT/root/.ad5x-ifs-native-fluidd.$$"
 NEW_DIR="$WORK_DIR/new"
 ZIP_FILE="$WORK_DIR/fluidd.zip"
 SHA_FILE="$WORK_DIR/fluidd.zip.sha256"
@@ -53,16 +49,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-fail() {
-    echo "AD5X IFS native Fluidd: $*" >&2
-    exit 1
-}
-
-for CMD in wget sha256sum unzip grep mv rm mkdir cat; do
-    command -v "$CMD" >/dev/null 2>&1 || fail "required command not found: $CMD"
-done
-
-[ -d "$FLUIDD_DIR" ] || fail "Fluidd directory not found: $FLUIDD_DIR"
+[ -d "$FLUIDD_DIR" ] || fail "Fluidd directory not found inside Moonraker root"
 [ -f "$FLUIDD_DIR/.version" ] || fail "Fluidd .version is missing"
 
 UPSTREAM_TAG="$(cat "$FLUIDD_DIR/.version" 2>/dev/null || true)"
@@ -161,5 +148,4 @@ rm -f "$FLUIDD_DIR"/ifs-spoolman-card*.js \
 echo "AD5X IFS native Fluidd installed successfully."
 echo "Fluidd identity: ghzserg/fluidd $UPSTREAM_TAG"
 echo "Native patch revision: $PATCH_REVISION"
-echo "Rollback snapshot: $PREVIOUS_DIR"
-INNER
+echo "Rollback snapshot: /root/fluidd.ifs-previous"
