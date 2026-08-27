@@ -115,8 +115,6 @@ jobs:
         if: steps.meta.outputs.already_published != 'true'
         with:
           node-version: '24'
-          cache: 'pnpm'
-          cache-dependency-path: upstream-fluidd/pnpm-lock.yaml
 
       - name: Enable pinned pnpm
         if: steps.meta.outputs.already_published != 'true'
