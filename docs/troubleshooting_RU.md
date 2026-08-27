@@ -2,54 +2,97 @@
 
 [English](troubleshooting.md)
 
-## Полная проверка состояния
+## Плагин не работает после перезагрузки или выключения
+
+Сначала выполните:
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
-## Веб-интерфейс не открывается
+Проверьте разделы `Z-Mod power-on hook`, `Process`, `API health` и последние строки `boot.log`.
 
-Проверьте, что процесс запущен и порт `7913` доступен. Затем просмотрите:
-
-```sh
-tail -n 100 /usr/data/config/mod_data/ifs_spoolman/ifs_spoolman.log
-```
-
-## Health имеет статус `degraded` или `error`
-
-Откройте:
+Автозапуск должен быть зарегистрирован в штатном пользовательском файле Z-Mod:
 
 ```text
-http://IP_ПРИНТЕРА:7913/api/health
+/usr/data/config/mod_data/power_on.sh
 ```
 
-Проверьте отдельные компоненты `ifs_sensor`, `moonraker` и `spoolman`, затем журнал событий:
+В нём должен быть ровно один блок между маркерами:
+
+```text
+# >>> AD5X IFS Plugin for Spoolman >>>
+# <<< AD5X IFS Plugin for Spoolman <<<
+```
+
+Если блок отсутствует, повторно запустите установщик/обновление release-линии. Не нужно вручную перезаписывать `power_on.sh`.
+
+Для диагностики старта:
 
 ```sh
+tail -n 100 /usr/data/config/mod_data/ifs_spoolman/boot.log
+tail -n 100 /usr/data/config/mod_data/ifs_spoolman/ifs_spoolman.log
 tail -n 100 /usr/data/config/mod_data/ifs_spoolman/events.log
 ```
 
-## Карточка Fluidd отсутствует
+Нормальная загрузка Z-Mod может включать переход от родного экрана к альтернативному экрану. Ошибки serial в момент такого переключения сами по себе не являются доказательством сбоя этого плагина.
 
-Повторно примените интеграцию запуском плагина:
+## Web UI на порту 7913 не открывается
+
+Проверьте backend:
+
+```sh
+/usr/data/config/mod_data/ifs_spoolman/status.sh
+wget -qO- http://127.0.0.1:7913/api/health
+```
+
+Если процесс отсутствует, запустите:
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/start.sh
 ```
 
-После этого обновите Fluidd без использования кэша браузера.
+`start.sh` ждёт появления процесса Moonraker при обычной загрузке. Если Moonraker вообще не запускается, сначала исправьте сам Z-Mod/Moonraker.
 
-## Активируется неверная катушка
+## Fluidd-карточка отсутствует или выглядит повреждённой
 
-Проверьте назначения в веб-интерфейсе или `assignments.json`. Сравните физически активный канал с полями `raw_active_slot` и `confirmed_active_slot` в `/api/status`.
+`status.sh` проверяет четыре части интеграции: `card`, `layout`, `dashboard`, `selection`.
 
-## Обновление завершилось ошибкой
+Повторный запуск backend идемпотентно переустанавливает актуальные JS-файлы и очищает старые варианты имён. При удалении плагина удаляются также legacy `visibility`/`controls` файлы и теги.
 
-Резервные копии находятся в:
+После обновления Fluidd выполните жёсткое обновление страницы браузера (`Ctrl+F5`).
 
-```text
-/usr/data/config/mod_data/ifs_spoolman/backups/
+## Spoolman не подключён
+
+Проверьте:
+
+```sh
+wget -qO- http://127.0.0.1:7125/server/spoolman/status
 ```
 
-Updater пытается выполнить откат автоматически. После него проверьте `status.sh` и оба журнала.
+Ожидается `"spoolman_connected": true`.
+
+Плагин не устанавливает и не заменяет Spoolman. Если Moonraker не подключён к нему, исправьте URL/доступность Spoolman до переустановки плагина.
+
+## Активная катушка не переключается
+
+Откройте:
+
+```sh
+/usr/data/config/mod_data/ifs_spoolman/status.sh
+```
+
+Проверьте `active_slot`, `moonraker_spool_id`, назначения слотов, `last_error` и `events.log`.
+
+Backend подтверждает физическую смену канала несколькими чтениями и выполняет повторные попытки синхронизации. Если активному IFS-слоту катушка не назначена, переключение намеренно пропускается.
+
+## Несколько процессов backend
+
+`status.sh` явно сообщает `multiple backend processes detected`. Безопасно выполните:
+
+```sh
+/usr/data/config/mod_data/ifs_spoolman/stop.sh
+/usr/data/config/mod_data/ifs_spoolman/start.sh
+```
+
+`stop.sh` сверяет `/proc/PID/cmdline` и не завершает посторонний процесс только из-за совпадения старого PID.
