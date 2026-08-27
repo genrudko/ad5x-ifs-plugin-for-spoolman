@@ -51,6 +51,9 @@ jobs:
           grep -F 'ifs-spoolman-dashboard' scripts/uninstall_fluidd_card.sh >/dev/null
           grep -F 'ifs-spoolman-selection' scripts/uninstall_fluidd_card.sh >/dev/null
           grep -F 'AD5X IFS Plugin for Spoolman >>>' scripts/power_on_hook.sh >/dev/null
+          grep -F 'snapshot_path "$POWER_ON" "external-power_on.sh"' update.sh >/dev/null
+          grep -F '.absent-$SNAP_KEY' update.sh >/dev/null
+          grep -F 'ROLLBACK_ARMED=1' update.sh >/dev/null
           ! grep -F '0.2.2 beta' plugin/ifs_spoolman.py
           ! grep -F '0.2.2 beta' plugin/ui_v0_2.html
 
@@ -73,6 +76,55 @@ jobs:
           ! grep -F 'AD5X IFS Plugin for Spoolman >>>' /usr/data/config/mod_data/power_on.sh
           grep -F 'echo user-startup-kept' /usr/data/config/mod_data/power_on.sh >/dev/null
           sh -n /usr/data/config/mod_data/power_on.sh
+
+      - name: Exercise exact updater rollback
+        run: |
+          TARGET=/usr/data/config/mod_data/ifs_spoolman
+          SOURCE=/tmp/ad5x-update-source
+          EXPECTED_POWER_ON=/tmp/ad5x-power-on.expected
+
+          sudo rm -rf "$TARGET" "$SOURCE"
+          sudo mkdir -p "$TARGET"
+
+          printf '%s\n' '#!/bin/sh' 'exit 0' | sudo tee "$TARGET/stop.sh" >/dev/null
+          printf '%s\n' '#!/bin/sh' 'echo old-started >/tmp/ad5x-old-started' 'exit 0' | sudo tee "$TARGET/start.sh" >/dev/null
+          printf '%s\n' '0.6.3-beta' | sudo tee "$TARGET/VERSION" >/dev/null
+          printf '%s\n' '{"keep":"config"}' | sudo tee "$TARGET/config.json" >/dev/null
+          printf '%s\n' '{"1":9}' | sudo tee "$TARGET/assignments.json" >/dev/null
+          sudo chmod 0755 "$TARGET/stop.sh" "$TARGET/start.sh"
+
+          printf '%s\n' '#!/bin/sh' 'echo user-startup-kept' >"$EXPECTED_POWER_ON"
+          sudo cp "$EXPECTED_POWER_ON" /usr/data/config/mod_data/power_on.sh
+          sudo chmod 0700 /usr/data/config/mod_data/power_on.sh
+
+          cp -a . "$SOURCE"
+          printf '%s\n' '#!/bin/sh' 'exit 1' >"$SOURCE/scripts/start.sh"
+          chmod +x "$SOURCE/scripts/start.sh"
+
+          set +e
+          sudo "$SOURCE/update.sh"
+          RC=$?
+          set -e
+          test "$RC" -ne 0
+
+          grep -Fx '0.6.3-beta' "$TARGET/VERSION" >/dev/null
+          grep -F 'echo old-started' "$TARGET/start.sh" >/dev/null
+          grep -Fx '{"keep":"config"}' "$TARGET/config.json" >/dev/null
+          grep -Fx '{"1":9}' "$TARGET/assignments.json" >/dev/null
+          test -f /tmp/ad5x-old-started
+
+          test ! -e "$TARGET/power_on_hook.sh"
+          test ! -e "$TARGET/ifs_spoolman.py"
+          test ! -e "$TARGET/ui_v0_2.html"
+
+          sudo cmp "$EXPECTED_POWER_ON" /usr/data/config/mod_data/power_on.sh
+          test "$(stat -c '%a' /usr/data/config/mod_data/power_on.sh)" = "700"
+          ! grep -F 'AD5X IFS Plugin for Spoolman >>>' /usr/data/config/mod_data/power_on.sh
+
+          BACKUP_DIR="$(sudo find "$TARGET/backups" -maxdepth 1 -type d -name 'update_*' | head -n 1)"
+          test -n "$BACKUP_DIR"
+          sudo test -f "$BACKUP_DIR/external-power_on.sh"
+          sudo test -f "$BACKUP_DIR/.absent-power_on_hook.sh"
 
       - name: Check package file parity
         run: |
