@@ -31,6 +31,7 @@
 - Карточка **AD5X IFS** и управление её размещением во Fluidd.
 - API состояния, конфигурации и диагностики.
 - Структурированный журнал событий с ротацией.
+- Штатный автозапуск через пользовательский `mod_data/power_on.sh` Z-Mod без перезаписи чужого содержимого файла.
 - Скрипты установки, обновления, проверки состояния и удаления.
 
 ## Требования
@@ -47,7 +48,7 @@
 Подключитесь к принтеру по SSH как `root` и вставьте:
 
 ```sh
-rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/main/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/release/standalone-0.6.x/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
 
 Параметр `?cb=$(date +%s)` предотвращает получение старой закэшированной версии установщика.
@@ -56,9 +57,11 @@ rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw
 
 - проверит, что запущен Moonraker;
 - проверит реальное подключение Moonraker к Spoolman;
-- загрузит все необходимые файлы напрямую с `raw.githubusercontent.com` без `git` и `codeload.github.com`;
+- загрузит все необходимые файлы только из release-линии `release/standalone-0.6.x`;
+- загрузит файлы напрямую с `raw.githubusercontent.com` без `git` и `codeload.github.com`;
 - добавит cache-busting к каждому загружаемому файлу;
 - определит, установлен ли плагин ранее;
+- зарегистрирует идемпотентный блок автозапуска в `mod_data/power_on.sh`, сохранив пользовательский код вокруг него;
 - при новой установке запустит `install.sh`;
 - при существующей установке запустит безопасный `update.sh` с резервной копией, health-check и автоматическим откатом.
 
@@ -78,9 +81,11 @@ http://IP_ПРИНТЕРА:7913/
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
+`status.sh` дополнительно проверяет наличие Z-Mod boot-hook, PID backend, HTTP API и все четыре части Fluidd-интеграции.
+
 ## Ручное обновление
 
-При необходимости можно загрузить свежую копию репозитория, перейти в её каталог и выполнить:
+При необходимости можно загрузить свежую копию **ветки `release/standalone-0.6.x`**, перейти в её каталог и выполнить:
 
 ```sh
 ./update.sh --dry-run
@@ -91,7 +96,7 @@ http://IP_ПРИНТЕРА:7913/
 
 ## Удаление
 
-С сохранением пользовательских данных в отдельной резервной папке:
+С сохранением пользовательских данных и диагностических журналов в отдельной резервной папке:
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes
@@ -103,10 +108,12 @@ http://IP_ПРИНТЕРА:7913/
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes --purge
 ```
 
+Удаление убирает только управляемый блок плагина из `mod_data/power_on.sh`; остальной пользовательский код в этом файле сохраняется.
+
 ## Версии
 
-- Пакет и служебные скрипты: `0.6.0-beta`
-- Backend: `0.5.0-beta`
+- Пакет и служебные скрипты: `0.6.4-beta`
+- Backend: `0.5.1-beta`
 
 ## Документация
 
