@@ -32,17 +32,42 @@ jobs:
           test "$(cat VERSION)" = "0.6.4-beta"
           grep -F 'APP_VERSION = "0.5.1-beta"' plugin/ifs_spoolman.py
           grep -F 'server_version="IFS-Spoolman/0.5.1-beta"' plugin/ifs_spoolman.py
+          grep -F 'slot_count = plain_int("slot_count", 4, 4)' plugin/ifs_spoolman.py
+          ! grep -F 'plain_int("slot_count", 1, 32)' plugin/ifs_spoolman.py
           grep -F 'release/standalone-0.6.x' zmod-install.sh
           grep -F 'power_on_hook.sh' install.sh >/dev/null
           grep -F 'power_on_hook.sh' update.sh >/dev/null
           grep -F 'power_on_hook.sh' scripts/update.sh >/dev/null
           grep -F 'power_on_hook.sh' PACKAGE_MANIFEST.txt >/dev/null
           grep -F 'power_on_hook.sh' zmod-install.sh >/dev/null
+          grep -F '/usr/data/config /opt/config' scripts/power_on_hook.sh >/dev/null
+          grep -F 'fluidd_integration' scripts/boot_start.sh >/dev/null
+          grep -F 'fluidd_integration' scripts/status.sh >/dev/null
           grep -F 'ifs-spoolman-dashboard' scripts/uninstall_fluidd_card.sh >/dev/null
           grep -F 'ifs-spoolman-selection' scripts/uninstall_fluidd_card.sh >/dev/null
           grep -F 'AD5X IFS Plugin for Spoolman >>>' scripts/power_on_hook.sh >/dev/null
           ! grep -F '0.2.2 beta' plugin/ifs_spoolman.py
           ! grep -F '0.2.2 beta' plugin/ui_v0_2.html
+
+      - name: Exercise power-on hook idempotence
+        run: |
+          sudo mkdir -p /usr/data/config/mod_data/ifs_spoolman
+          printf '%s\n' '#!/bin/sh' 'echo user-startup-kept >/tmp/ad5x-user-startup' | sudo tee /usr/data/config/mod_data/power_on.sh >/dev/null
+          sudo chmod +x /usr/data/config/mod_data/power_on.sh
+          sudo cp scripts/power_on_hook.sh /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh
+          sudo chmod +x /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh
+
+          sudo /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh install
+          sudo /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh install
+
+          test "$(grep -Fc '# >>> AD5X IFS Plugin for Spoolman >>>' /usr/data/config/mod_data/power_on.sh)" -eq 1
+          grep -F 'echo user-startup-kept' /usr/data/config/mod_data/power_on.sh >/dev/null
+          sh -n /usr/data/config/mod_data/power_on.sh
+
+          sudo /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh remove
+          ! grep -F 'AD5X IFS Plugin for Spoolman >>>' /usr/data/config/mod_data/power_on.sh
+          grep -F 'echo user-startup-kept' /usr/data/config/mod_data/power_on.sh >/dev/null
+          sh -n /usr/data/config/mod_data/power_on.sh
 
       - name: Check package file parity
         run: |
