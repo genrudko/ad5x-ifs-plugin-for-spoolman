@@ -5,6 +5,7 @@ APP_NAME="AD5X IFS Plugin for Spoolman"
 TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"
 REPO_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 DRY_RUN=0
+BACKUP_KEEP=5
 
 case "${1:-}" in
     "") ;;
@@ -56,6 +57,17 @@ fi
     exit 1
 }
 
+prune_backups() {
+    [ -d "$TARGET_DIR/backups" ] || return 0
+    COUNT=0
+    for DIR in $(ls -1dt "$TARGET_DIR"/backups/update_* 2>/dev/null || true); do
+        COUNT=$((COUNT + 1))
+        if [ "$COUNT" -gt "$BACKUP_KEEP" ]; then
+            rm -rf "$DIR"
+        fi
+    done
+}
+
 STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"
 mkdir -p "$BACKUP_DIR"
@@ -75,6 +87,7 @@ rollback() {
         "$TARGET_DIR/power_on_hook.sh" install 2>/dev/null || true
     fi
     "$TARGET_DIR/start.sh" 2>/dev/null || true
+    prune_backups
 }
 
 "$TARGET_DIR/stop.sh" || true
@@ -100,6 +113,9 @@ if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then
     exit 1
 fi
 
+prune_backups
+
 echo "$APP_NAME updated."
 echo "Backup: $BACKUP_DIR"
+echo "Retained update backups: $BACKUP_KEEP"
 echo "Version: $(cat "$TARGET_DIR/VERSION")"
