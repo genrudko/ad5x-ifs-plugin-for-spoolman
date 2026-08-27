@@ -3,6 +3,7 @@
 APP_NAME="AD5X IFS Plugin for Spoolman"
 APP_DIR="/usr/data/config/mod_data/ifs_spoolman"
 PID_FILE="$APP_DIR/ifs_spoolman.pid"
+CONFIG_FILE="$APP_DIR/config.json"
 API="http://127.0.0.1:7913"
 EXIT_CODE=0
 
@@ -21,6 +22,14 @@ find_plugin_pids() {
         PID="${P##*/}"
         pid_is_plugin "$PID" && echo "$PID"
     done
+}
+
+fluidd_enabled() {
+    [ -f "$CONFIG_FILE" ] || return 0
+    if grep -Eq '"fluidd_integration"[[:space:]]*:[[:space:]]*false([[:space:],}]|$)' "$CONFIG_FILE"; then
+        return 1
+    fi
+    return 0
 }
 
 echo "=== $APP_NAME ==="
@@ -98,36 +107,40 @@ fi
 
 echo
 echo "--- Fluidd integration ---"
-MOON_PID=""
-for P in /proc/[0-9]*; do
-    [ -r "$P/cmdline" ] || continue
-    CMD="$(tr '\0' ' ' <"$P/cmdline" 2>/dev/null || true)"
-    case "$CMD" in
-        *moonraker.py*)
-            MOON_PID="${P##*/}"
-            break
-            ;;
-    esac
-done
+if ! fluidd_enabled; then
+    echo "Fluidd integration: disabled by config"
+else
+    MOON_PID=""
+    for P in /proc/[0-9]*; do
+        [ -r "$P/cmdline" ] || continue
+        CMD="$(tr '\0' ' ' <"$P/cmdline" 2>/dev/null || true)"
+        case "$CMD" in
+            *moonraker.py*)
+                MOON_PID="${P##*/}"
+                break
+                ;;
+        esac
+    done
 
-if [ -n "$MOON_PID" ]; then
-    INDEX="/proc/$MOON_PID/root/root/fluidd/index.html"
-    if [ -f "$INDEX" ]; then
-        for PART in card layout dashboard selection; do
-            if grep -q "ifs-spoolman-$PART" "$INDEX"; then
-                echo "$PART: installed"
-            else
-                echo "$PART: not installed"
-                EXIT_CODE=1
-            fi
-        done
+    if [ -n "$MOON_PID" ]; then
+        INDEX="/proc/$MOON_PID/root/root/fluidd/index.html"
+        if [ -f "$INDEX" ]; then
+            for PART in card layout dashboard selection; do
+                if grep -q "ifs-spoolman-$PART" "$INDEX"; then
+                    echo "$PART: installed"
+                else
+                    echo "$PART: not installed"
+                    EXIT_CODE=1
+                fi
+            done
+        else
+            echo "Fluidd index.html: not found"
+            EXIT_CODE=1
+        fi
     else
-        echo "Fluidd index.html: not found"
+        echo "Moonraker: not found"
         EXIT_CODE=1
     fi
-else
-    echo "Moonraker: not found"
-    EXIT_CODE=1
 fi
 
 echo
