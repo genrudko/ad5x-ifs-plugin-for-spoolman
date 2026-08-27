@@ -71,6 +71,22 @@ elif [ -d "$ZMOD_ROOT" ]; then
     ROOT="$ZMOD_ROOT"
 fi
 
+if [ -n "$ROOT" ] && [ -f "$ROOT/root/fluidd/ad5x_ifs_native.json" ]; then
+    if [ ! -x "$APP_DIR/restore_fluidd_native.sh" ]; then
+        echo "$APP_NAME: native Fluidd найден, но restore_fluidd_native.sh отсутствует; удаление остановлено." >&2
+        exit 1
+    fi
+
+    if ! "$APP_DIR/restore_fluidd_native.sh"; then
+        echo "$APP_NAME: не удалось восстановить штатный Fluidd; удаление остановлено." >&2
+        exit 1
+    fi
+
+    if [ -n "$MOON_PID" ] && [ -d "/proc/$MOON_PID/root" ]; then
+        ROOT="/proc/$MOON_PID/root"
+    fi
+fi
+
 if [ -n "$ROOT" ]; then
     if chroot "$ROOT" /bin/sh -c \
         "[ -x '/opt/config/mod_data/ifs_spoolman/uninstall_fluidd_card.sh' ]"
@@ -100,6 +116,7 @@ if [ "$PURGE" -eq 0 ]; then
         events.log.3 \
         ifs_spoolman.log \
         fluidd_card.log \
+        fluidd_native.log \
         boot.log
     do
         [ -f "$APP_DIR/$FILE" ] || continue
