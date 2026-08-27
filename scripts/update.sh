@@ -34,6 +34,7 @@ ifs-spoolman-visibility.js
 ifs-spoolman-selection.js
 install_fluidd_card.sh
 uninstall_fluidd_card.sh
+power_on_hook.sh
 boot_start.sh
 start.sh
 stop.sh
@@ -83,6 +84,9 @@ rollback() {
         cp "$FILE" "$TARGET_DIR/${FILE##*/}"
     done
     chmod +x "$TARGET_DIR"/*.sh 2>/dev/null || true
+    if [ -x "$TARGET_DIR/power_on_hook.sh" ]; then
+        "$TARGET_DIR/power_on_hook.sh" install 2>/dev/null || true
+    fi
     "$TARGET_DIR/start.sh" 2>/dev/null || true
 }
 
@@ -95,6 +99,7 @@ if [ "$SOURCE_DIR" != "$TARGET_DIR" ]; then
 fi
 
 chmod +x "$TARGET_DIR"/*.sh
+"$TARGET_DIR/power_on_hook.sh" install
 
 if ! "$TARGET_DIR/start.sh"; then
     rollback
