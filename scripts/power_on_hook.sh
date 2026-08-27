@@ -16,42 +16,40 @@ ensure_power_on() {
     mkdir -p "${POWER_ON%/*}"
     if [ ! -f "$POWER_ON" ]; then
         printf '%s\n' '#!/bin/sh' >"$POWER_ON"
+        chmod +x "$POWER_ON" 2>/dev/null || true
     fi
 }
 
-strip_managed_block() {
+render_without_managed_block() {
     awk -v begin="$BEGIN_MARKER" -v end="$END_MARKER" '
         $0 == begin {
             if (skip) exit 3
             skip = 1
-            found_begin = 1
+            begin_count++
             next
         }
         $0 == end {
             if (!skip) exit 3
             skip = 0
-            found_end = 1
+            end_count++
             next
         }
         !skip { print }
         END {
-            if (skip || (found_begin && !found_end)) exit 3
+            if (skip || begin_count != end_count) exit 3
         }
     ' "$POWER_ON" >"$TMP" || {
         echo "$APP_NAME: повреждён управляемый блок в $POWER_ON" >&2
         rm -f "$TMP"
         return 1
     }
-
-    cat "$TMP" >"$POWER_ON"
-    rm -f "$TMP"
 }
 
 install_hook() {
     ensure_power_on
-    strip_managed_block
+    render_without_managed_block
 
-    cat >>"$POWER_ON" <<'EOF'
+    cat >>"$TMP" <<'EOF'
 
 # >>> AD5X IFS Plugin for Spoolman >>>
 AD5X_IFS_BASE=""
@@ -70,21 +68,24 @@ unset AD5X_IFS_CANDIDATE AD5X_IFS_START AD5X_IFS_BOOT_LOG AD5X_IFS_BASE
 # <<< AD5X IFS Plugin for Spoolman <<<
 EOF
 
-    chmod +x "$POWER_ON" 2>/dev/null || true
+    chmod +x "$TMP" 2>/dev/null || true
+    mv "$TMP" "$POWER_ON"
     echo "$APP_NAME: автозапуск зарегистрирован в $POWER_ON"
 }
 
 remove_hook() {
     [ -f "$POWER_ON" ] || return 0
-    strip_managed_block
-    chmod +x "$POWER_ON" 2>/dev/null || true
+    render_without_managed_block
+    chmod +x "$TMP" 2>/dev/null || true
+    mv "$TMP" "$POWER_ON"
     echo "$APP_NAME: автозапуск удалён из $POWER_ON"
 }
 
 check_hook() {
     [ -f "$POWER_ON" ] || exit 1
-    grep -Fqx "$BEGIN_MARKER" "$POWER_ON" &&
-        grep -Fqx "$END_MARKER" "$POWER_ON"
+    BEGIN_COUNT="$(grep -Fxc "$BEGIN_MARKER" "$POWER_ON" 2>/dev/null || true)"
+    END_COUNT="$(grep -Fxc "$END_MARKER" "$POWER_ON" 2>/dev/null || true)"
+    [ "$BEGIN_COUNT" -eq 1 ] && [ "$END_COUNT" -eq 1 ]
 }
 
 case "${1:-install}" in
