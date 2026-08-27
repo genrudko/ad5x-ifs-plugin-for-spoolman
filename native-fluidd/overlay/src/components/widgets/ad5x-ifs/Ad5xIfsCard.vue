@@ -4,6 +4,7 @@
     icon="$filament"
     draggable
     layout-path="dashboard.ad5x-ifs-card"
+    card-classes="ad5x-ifs-card"
   >
     <template #menu>
       <v-chip
@@ -18,6 +19,7 @@
 
       <app-btn
         small
+        text
         class="me-1 my-1"
         @click="openManager"
       >
@@ -25,7 +27,7 @@
       </app-btn>
     </template>
 
-    <v-card-text class="pt-3">
+    <v-card-text class="ifs-card-content pt-3 pb-3">
       <v-alert
         v-if="lastError"
         type="warning"
@@ -44,7 +46,9 @@
           class="ifs-slot"
           :class="{
             'ifs-slot--selected': selectedSlot === slot,
-            'ifs-slot--active': activeSlot === slot
+            'ifs-slot--active': activeSlot === slot,
+            'ifs-slot--assigned': Boolean(spoolForSlot(slot)),
+            'ifs-slot--empty': !spoolForSlot(slot)
           }"
           @click="selectedSlot = slot"
         >
@@ -77,12 +81,10 @@
         </button>
       </div>
 
-      <v-divider class="my-3" />
+      <v-divider class="ifs-divider my-3" />
 
       <div v-if="selectedSpool" class="ifs-detail">
-        <div
-          class="ifs-spool ifs-spool--large"
-        >
+        <div class="ifs-spool ifs-spool--large">
           <div
             class="ifs-spool__winding"
             :style="{ background: spoolGradient(selectedSpool) }"
@@ -140,10 +142,7 @@
           <div class="ifs-progress mt-1">
             <div
               class="ifs-progress__value"
-              :style="{
-                width: `${percentage(selectedSpool)}%`,
-                background: spoolGradient(selectedSpool)
-              }"
+              :style="{ width: `${percentage(selectedSpool)}%` }"
             />
           </div>
         </div>
@@ -169,14 +168,19 @@
         </div>
       </div>
 
-      <div class="ifs-footer mt-3">
-        <span>{{ $t('app.ad5x_ifs.active_slot') }}: IFS {{ activeSlot }}</span>
-        <span>·</span>
-        <span>{{ $t('app.ad5x_ifs.assigned') }}: {{ assignedCount }}/4</span>
-        <template v-if="currentSpoolLabel !== '—'">
-          <span>·</span>
-          <span>{{ $t('app.ad5x_ifs.moonraker_spool') }}: {{ currentSpoolLabel }}</span>
-        </template>
+      <div class="ifs-footer mt-4">
+        <span class="ifs-meta-pill ifs-meta-pill--primary">
+          {{ $t('app.ad5x_ifs.active_slot') }}: IFS {{ activeSlot }}
+        </span>
+        <span class="ifs-meta-pill">
+          {{ $t('app.ad5x_ifs.assigned') }}: {{ assignedCount }}/4
+        </span>
+        <span
+          v-if="currentSpoolLabel !== '—'"
+          class="ifs-meta-pill ifs-meta-pill--wide"
+        >
+          {{ $t('app.ad5x_ifs.moonraker_spool') }}: {{ currentSpoolLabel }}
+        </span>
       </div>
     </v-card-text>
 
@@ -396,30 +400,57 @@ export default Vue.extend({
 </script>
 
 <style lang="scss" scoped>
+.ad5x-ifs-card {
+  overflow: hidden;
+  border: 1px solid rgba(127, 127, 127, .24);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .14) !important;
+}
+
+.ifs-card-content {
+  background: rgba(0, 0, 0, .045);
+}
+
 .ifs-slots {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 9px;
 }
 
 .ifs-slot {
+  position: relative;
   min-width: 0;
-  padding: 8px 6px 7px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  padding: 9px 7px 8px;
+  border: 1px solid rgba(127, 127, 127, .25);
   border-radius: 10px;
-  background: transparent;
+  background: rgba(127, 127, 127, .055);
   color: inherit;
   cursor: pointer;
-  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+  opacity: .82;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
 }
 
 .ifs-slot:hover {
-  background: rgba(127, 127, 127, .08);
+  background: rgba(127, 127, 127, .11);
+  opacity: 1;
+}
+
+.ifs-slot--assigned {
+  opacity: 1;
+}
+
+.ifs-slot--empty {
+  opacity: .58;
 }
 
 .ifs-slot--selected {
   border-color: var(--v-primary-base, #2196f3);
-  box-shadow: inset 0 0 0 1px rgba(33, 150, 243, .18);
+  background: rgba(127, 127, 127, .10);
+  box-shadow: inset 3px 0 0 var(--v-primary-base, #2196f3), inset 0 0 0 1px rgba(127, 127, 127, .10);
+  opacity: 1;
+}
+
+.ifs-slot--active:not(.ifs-slot--selected) {
+  border-color: var(--v-success-base, #4caf50);
 }
 
 .ifs-slot--active .ifs-slot__number {
@@ -441,7 +472,7 @@ export default Vue.extend({
 }
 
 .ifs-slot__material {
-  margin-top: 5px;
+  margin-top: 6px;
   overflow: hidden;
   font-size: 11px;
   font-weight: 700;
@@ -450,12 +481,17 @@ export default Vue.extend({
   white-space: nowrap;
 }
 
+.ifs-divider {
+  opacity: .72;
+}
+
 .ifs-detail {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 14px;
   align-items: center;
   min-width: 0;
+  padding: 1px 2px;
 }
 
 .ifs-detail__body,
@@ -467,8 +503,8 @@ export default Vue.extend({
   position: relative;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: rgba(127, 127, 127, .10);
-  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .20);
+  background: rgba(127, 127, 127, .13);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .18), inset 0 0 0 1px rgba(127, 127, 127, .28);
 }
 
 .ifs-spool--small {
@@ -488,7 +524,7 @@ export default Vue.extend({
   overflow: hidden;
   border-radius: 50%;
   background: #8e939b;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14);
 }
 
 .ifs-spool__hub {
@@ -496,7 +532,7 @@ export default Vue.extend({
   inset: 31%;
   border-radius: 50%;
   background: rgba(45, 52, 64, .92);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .10);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12);
 }
 
 .ifs-spool__hole {
@@ -507,11 +543,10 @@ export default Vue.extend({
 }
 
 .ifs-spool--empty {
-  opacity: .45;
+  opacity: .42;
 }
 
-.ifs-progress-label,
-.ifs-footer {
+.ifs-progress-label {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -520,27 +555,71 @@ export default Vue.extend({
   font-size: 11px;
 }
 
+.ifs-progress-label > span {
+  opacity: .76;
+}
+
+.ifs-progress-label > strong {
+  font-weight: 700;
+}
+
 .ifs-progress {
   height: 7px;
   overflow: hidden;
+  border: 1px solid rgba(127, 127, 127, .16);
   border-radius: 999px;
-  background: rgba(127, 127, 127, .14);
+  background: rgba(127, 127, 127, .20);
 }
 
 .ifs-progress__value {
   height: 100%;
   border-radius: inherit;
+  background: var(--v-primary-base, #2196f3);
   transition: width .2s ease;
 }
 
 .ifs-footer {
-  justify-content: flex-start;
-  color: rgba(127, 127, 127, .95);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ifs-meta-pill {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 1px solid rgba(127, 127, 127, .22);
+  border-radius: 6px;
+  background: rgba(127, 127, 127, .06);
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: .84;
+}
+
+.ifs-meta-pill--primary {
+  border-color: var(--v-primary-base, #2196f3);
+  color: var(--v-primary-base, #2196f3);
+  opacity: 1;
+}
+
+.ifs-meta-pill--wide {
+  flex: 0 1 auto;
 }
 
 @media (max-width: 600px) {
   .ifs-slots {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ifs-detail {
+    gap: 10px;
+  }
+
+  .ifs-meta-pill--wide {
+    flex-basis: 100%;
   }
 }
 </style>
