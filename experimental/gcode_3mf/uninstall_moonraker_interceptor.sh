@@ -11,6 +11,7 @@ MARK_END="# <<< AD5X GCODE3MF EXPERIMENTAL <<<"
 find_component_dir_chroot() {
     chroot "$CHROOT" /bin/sh -c '
         for d in \
+            /root/moonraker-env/moonraker/components \
             /root/moonraker/moonraker/components \
             /usr/data/zmod/moonraker/moonraker/components \
             /opt/moonraker/moonraker/components
