@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AD5X IFS + G-code 3MF — Experimental</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#0b1120;--surface:#151c28;--surface2:#1c2533;--border:#2d3948;--text:#eef2ff;--muted:#94a3b8;--primary:#3b82f6;--ok:#7fd39a;--bad:#ff9b9b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}.shell{max-width:1240px;margin:auto;padding:18px}.top{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:14px}.title{font-size:22px;font-weight:800}.sub{color:var(--muted);font-size:13px;margin-top:4px}.tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:14px}.tab{width:auto;margin:0 0 -1px;padding:11px 16px;border:1px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:transparent;color:var(--muted);font-weight:800;cursor:pointer}.tab.active{background:var(--surface);border-color:var(--border);color:var(--text)}.pane{display:none}.pane.active{display:block}.ifs-frame{width:100%;height:calc(100vh - 125px);min-height:760px;border:1px solid var(--border);border-radius:14px;background:var(--bg)}.status{margin:10px 0 16px;color:#b8c4cf}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}.preview{width:100%;aspect-ratio:4/3;object-fit:contain;background:#090d13;display:block}.body{padding:14px}.name{font-weight:800;overflow-wrap:anywhere;margin-bottom:8px}.meta{color:#aab5bf;font-size:13px;line-height:1.55;min-height:64px}.mats{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}.mat{padding:4px 8px;border:1px solid #394759;border-radius:999px;font-size:12px}button.action{margin-top:12px;width:100%;border:0;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:800}button.action:disabled{opacity:.55;cursor:default}.small{font-size:12px;color:#8693a0;margin-top:8px;overflow-wrap:anywhere}.ok{color:var(--ok)}.bad{color:var(--bad)}@media(max-width:700px){.shell{padding:10px}.top{align-items:flex-start}.ifs-frame{height:calc(100vh - 110px);min-height:640px}.tab{flex:1}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="top">
+    <div><div class="title">AD5X IFS</div><div class="sub">Экспериментальная общая панель. Release v0.6.6 не изменяется.</div></div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-pane="ifs">IFS / Spoolman</button>
+    <button class="tab" data-pane="three">3MF</button>
+  </div>
+  <section id="ifs" class="pane active"><iframe class="ifs-frame" src="/ifs" title="IFS"></iframe></section>
+  <section id="three" class="pane">
+    <div id="status" class="status">Открой вкладку 3MF для загрузки файлов.</div>
+    <div id="grid" class="grid"></div>
+  </section>
+</div>
+<script>
+const $=s=>document.querySelector(s);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const q=s=>encodeURIComponent(s);const fmtBytes=n=>n<1024*1024?(n/1024).toFixed(1)+' KiB':(n/1024/1024).toFixed(1)+' MiB';const fmtTime=s=>{s=Number(s||0);if(!s)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?`${h} ч ${m} мин`:`${m} мин`};
+let loaded=false;
+for(const b of document.querySelectorAll('.tab'))b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.pane').forEach(x=>x.classList.toggle('active',x.id===b.dataset.pane));if(b.dataset.pane==='three'&&!loaded){loaded=true;load3mf()}});
+async function details(card,file){try{const r=await fetch('/api/3mf/inspect?filename='+q(file.filename));const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'inspect failed');const plate=d.slice_info?.plate||{},mats=d.used_filaments||[];card.querySelector('.meta').innerHTML=`Plate: ${esc(d.selected_plate)} · G-code: ${fmtBytes(d.gcode_size)}<br>Время: ${fmtTime(plate.prediction)} · Вес: ${esc(plate.weight||'—')} г<br>MD5: <span class="${d.gcode_md5_valid?'ok':'bad'}">${d.gcode_md5_valid?'OK':'FAIL'}</span>`;card.querySelector('.mats').innerHTML=mats.map(m=>{const c=m.configured||{};return `<span class="mat">${esc(m.type||c.type||'?')} · ${esc(m.color||c.color||'?')} · ${esc(m.used_g??'?')} г</span>`}).join('');card.querySelector('.action').disabled=false}catch(e){card.querySelector('.meta').innerHTML=`<span class="bad">${esc(e.message)}</span>`}}
+async function prepare(btn,file){btn.disabled=true;btn.textContent='Подготовка…';const note=btn.parentElement.querySelector('.small');try{const r=await fetch('/api/3mf/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.filename})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'prepare failed');btn.textContent='Cache готов';note.textContent=d.klipper_filename;note.className='small ok'}catch(e){btn.textContent='Ошибка';note.textContent=e.message;note.className='small bad';btn.disabled=false}}
+async function load3mf(){try{const health=await(await fetch('/api/3mf/health')).json();const r=await fetch('/api/3mf/files');const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'file list failed');$('#status').textContent=`${health.application} · найдено 3MF: ${d.files.length}`;for(const file of d.files){const card=document.createElement('article');card.className='card';card.innerHTML=`<img class="preview" alt="" src="/api/3mf/preview?size=large&filename=${q(file.filename)}"><div class="body"><div class="name">${esc(file.filename)}</div><div class="meta">Разбор metadata…</div><div class="mats"></div><button class="action" disabled>Подготовить скрытый G-code</button><div class="small">${fmtBytes(file.size)}</div></div>`;$('#grid').appendChild(card);card.querySelector('.action').addEventListener('click',()=>prepare(card.querySelector('.action'),file));details(card,file)}}catch(e){$('#status').innerHTML=`<span class="bad">${esc(e.message)}</span>`}}
+</script>
+</body>
+</html>
