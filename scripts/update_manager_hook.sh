@@ -17,11 +17,35 @@ fail() {
     exit 1
 }
 
+count_exact() {
+    NEEDLE="$1"
+    [ -f "$CONF" ] || {
+        echo 0
+        return 0
+    }
+    grep -Fxc "$NEEDLE" "$CONF" 2>/dev/null || true
+}
+
+validate_marker_state() {
+    BEGIN_COUNT="$(count_exact "$BEGIN_MARKER")"
+    END_COUNT="$(count_exact "$END_MARKER")"
+    SECTION_COUNT="$(count_exact "$SECTION")"
+
+    if [ "$BEGIN_COUNT" -eq 0 ] && [ "$END_COUNT" -eq 0 ]; then
+        [ "$SECTION_COUNT" -eq 0 ] ||
+            fail "$SECTION уже существует вне управляемого блока; автоматическая перезапись запрещена"
+        return 0
+    fi
+
+    [ "$BEGIN_COUNT" -eq 1 ] && [ "$END_COUNT" -eq 1 ] && [ "$SECTION_COUNT" -eq 1 ] ||
+        fail "повреждён или дублирован управляемый update_manager block; автоматическая перезапись запрещена"
+}
+
 has_managed_block() {
     [ -f "$CONF" ] || return 1
-    grep -Fqx "$BEGIN_MARKER" "$CONF" 2>/dev/null &&
-        grep -Fqx "$END_MARKER" "$CONF" 2>/dev/null &&
-        grep -Fqx "$SECTION" "$CONF" 2>/dev/null
+    [ "$(count_exact "$BEGIN_MARKER")" -eq 1 ] &&
+        [ "$(count_exact "$END_MARKER")" -eq 1 ] &&
+        [ "$(count_exact "$SECTION")" -eq 1 ]
 }
 
 strip_managed_block() {
@@ -37,6 +61,7 @@ strip_managed_block() {
 replace_conf_without_block() {
     mkdir -p "${CONF%/*}"
     [ -f "$CONF" ] || : >"$CONF"
+    validate_marker_state
 
     CLEAN="$CONF.ifs-clean.$$"
     NEW="$CONF.ifs-new.$$"
@@ -53,11 +78,7 @@ replace_conf_without_block() {
 install_block() {
     mkdir -p "${CONF%/*}"
     [ -f "$CONF" ] || : >"$CONF"
-
-    if grep -Fqx "$SECTION" "$CONF" 2>/dev/null && ! has_managed_block; then
-        fail "$SECTION уже существует вне управляемого блока; автоматическая перезапись запрещена"
-    fi
-
+    validate_marker_state
     replace_conf_without_block
 
     if [ -s "$CONF" ]; then
@@ -82,6 +103,11 @@ EOF
 }
 
 remove_block() {
+    [ -f "$CONF" ] || {
+        echo "$APP_NAME: user.moonraker.conf отсутствует; удалять нечего."
+        exit 0
+    }
+    validate_marker_state
     if ! has_managed_block; then
         echo "$APP_NAME: управляемый update_manager block отсутствует."
         exit 0
@@ -91,6 +117,7 @@ remove_block() {
 }
 
 check_block() {
+    validate_marker_state
     has_managed_block || return 1
     grep -Fqx "type: git_repo" "$CONF" || return 1
     grep -Fqx "path: $MOONRAKER_PATH" "$CONF" || return 1

@@ -60,11 +60,10 @@ fluidd_enabled() {
     return 0
 }
 
-prepare_dev_checkout() {
-    # Z-Mod's generic clone starts from the repository default branch. For an
-    # explicit candidate/dev ref, prepare that checkout first; plugins.sh then
-    # owns the normal enable/install sequence.
-    [ "$UPDATE_CHANNEL" = "dev" ] || return 0
+prepare_source_checkout() {
+    # Pin the initial checkout to the requested branch before handing control to
+    # Z-Mod plugins.sh. This avoids its generic `git clone` starting from the
+    # repository default branch when our supported line is a maintenance branch.
     [ -d "$ZMOD_ROOT" ] || fail "Z-Mod chroot не найден: $ZMOD_ROOT"
 
     if [ -e "$SOURCE_DIR" ] && [ ! -d "$SOURCE_DIR/.git" ]; then
@@ -77,11 +76,11 @@ prepare_dev_checkout() {
     unset LD_LIBRARY_PATH LD_PRELOAD || true
 
     if [ ! -d "$SOURCE_DIR/.git" ]; then
-        echo "Dev checkout: $REF"
+        echo "Git checkout: $REF"
         chroot "$ZMOD_ROOT" /bin/bash -c \
             "git clone --branch '$REF' --single-branch '$ORIGIN' '/opt/config/mod_data/plugins/$PLUGIN_NAME'"
     else
-        echo "Dev checkout уже существует: обновляю $REF"
+        echo "Git checkout уже существует: синхронизирую $REF"
         chroot "$ZMOD_ROOT" /bin/bash -c \
             "cd '/opt/config/mod_data/plugins/$PLUGIN_NAME' && git fetch origin '$REF' && git checkout '$REF' && git pull --ff-only origin '$REF'"
     fi
@@ -112,8 +111,8 @@ PLUGINS_SCRIPT="$(find_plugins_script 2>/dev/null || true)"
 [ -n "$PLUGINS_SCRIPT" ] || fail "штатный Z-Mod plugins.sh не найден"
 echo "Z-Mod plugin manager: $PLUGINS_SCRIPT"
 
-# Bootstrap downloads one small registration helper only. All plugin source and
-# all subsequent updates are delivered by Git through Z-Mod/Moonraker.
+# Bootstrap uses raw transport for this one registration helper only. The
+# plugin source itself and every later update are delivered by Git.
 wget -qO "$HOOK_TMP" "$RAW_BASE/scripts/update_manager_hook.sh?cb=$(date +%s 2>/dev/null || echo $$)" ||
     fail "не удалось загрузить bootstrap helper"
 [ -s "$HOOK_TMP" ] || fail "bootstrap helper пуст"
@@ -124,10 +123,10 @@ AD5X_IFS_PRIMARY_BRANCH="$REF" \
 AD5X_IFS_UPDATE_CHANNEL="$UPDATE_CHANNEL" \
     "$HOOK_TMP" install
 
-prepare_dev_checkout
+prepare_source_checkout
 
-# Exact current Z-Mod contract: plugins.sh clones/pulls the Git repository,
-# validates <plugin>/<plugin>.cfg, calls install.sh and requests Klipper restart.
+# Exact current Z-Mod contract: plugins.sh pulls the Git repository, validates
+# <plugin>/<plugin>.cfg, calls install.sh and requests Klipper restart.
 "$PLUGINS_SCRIPT" "$PLUGIN_NAME" Enable
 
 [ -f "$TARGET_DIR/VERSION" ] || fail "runtime не появился после ENABLE_PLUGIN"

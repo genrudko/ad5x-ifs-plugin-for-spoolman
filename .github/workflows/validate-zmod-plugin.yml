@@ -1,0 +1,103 @@
+name: Validate Z-Mod plugin lifecycle
+
+on:
+  push:
+    paths:
+      - 'ad5x_ifs_spoolman.cfg'
+      - 'install.sh'
+      - 'uninstall.sh'
+      - 'update.sh'
+      - 'zmod-install.sh'
+      - 'scripts/update_manager_hook.sh'
+      - '.github/workflows/validate-zmod-plugin.yml'
+  pull_request:
+    paths:
+      - 'ad5x_ifs_spoolman.cfg'
+      - 'install.sh'
+      - 'uninstall.sh'
+      - 'update.sh'
+      - 'zmod-install.sh'
+      - 'scripts/update_manager_hook.sh'
+      - '.github/workflows/validate-zmod-plugin.yml'
+
+jobs:
+  zmod-plugin-lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check shell and Z-Mod contract
+        run: |
+          sh -n install.sh
+          sh -n uninstall.sh
+          sh -n update.sh
+          sh -n zmod-install.sh
+          sh -n scripts/update_manager_hook.sh
+          test -f ad5x_ifs_spoolman.cfg
+          grep -F 'PLUGIN_NAME="ad5x_ifs_spoolman"' zmod-install.sh
+          grep -F 'plugins.sh' zmod-install.sh
+          grep -F 'mod_data/plugins/$PLUGIN_NAME' zmod-install.sh
+          grep -F '[update_manager $PLUGIN_NAME]' scripts/update_manager_hook.sh
+          grep -F 'type: git_repo' scripts/update_manager_hook.sh
+          grep -F 'primary_branch: $PRIMARY_BRANCH' scripts/update_manager_hook.sh
+          grep -F 'channel: $CHANNEL' scripts/update_manager_hook.sh
+          ! grep -F 'plugin/ifs_spoolman.py' zmod-install.sh
+
+      - name: Exercise update-manager block ownership
+        run: |
+          CONF=/usr/data/config/mod_data/user.moonraker.conf
+          sudo rm -rf /usr/data/config/mod_data
+          sudo mkdir -p /usr/data/config/mod_data
+          printf '%s\n' '[authorization]' 'trusted_clients:' '  127.0.0.1' | sudo tee "$CONF" >/dev/null
+
+          sudo env \
+            AD5X_IFS_PRIMARY_BRANCH=feature/test-branch \
+            AD5X_IFS_UPDATE_CHANNEL=dev \
+            ./scripts/update_manager_hook.sh install
+          sudo env \
+            AD5X_IFS_PRIMARY_BRANCH=feature/test-branch \
+            AD5X_IFS_UPDATE_CHANNEL=dev \
+            ./scripts/update_manager_hook.sh install
+
+          test "$(grep -Fc '# >>> AD5X IFS Spoolman update manager >>>' "$CONF")" -eq 1
+          test "$(grep -Fc '# <<< AD5X IFS Spoolman update manager <<<' "$CONF")" -eq 1
+          test "$(grep -Fc '[update_manager ad5x_ifs_spoolman]' "$CONF")" -eq 1
+          grep -Fx '[authorization]' "$CONF"
+          grep -Fx 'channel: dev' "$CONF"
+          grep -Fx 'primary_branch: feature/test-branch' "$CONF"
+          grep -Fx 'path: /root/printer_data/config/mod_data/plugins/ad5x_ifs_spoolman' "$CONF"
+
+          sudo ./scripts/update_manager_hook.sh check
+          sudo ./scripts/update_manager_hook.sh remove
+          grep -Fx '[authorization]' "$CONF"
+          ! grep -F 'AD5X IFS Spoolman update manager' "$CONF"
+          ! grep -F '[update_manager ad5x_ifs_spoolman]' "$CONF"
+
+      - name: Reject ownership conflicts and malformed blocks
+        run: |
+          CONF=/usr/data/config/mod_data/user.moonraker.conf
+          printf '%s\n' '[update_manager ad5x_ifs_spoolman]' 'type: git_repo' | sudo tee "$CONF" >/dev/null
+          if sudo ./scripts/update_manager_hook.sh install; then
+            echo 'unmarked conflicting section was overwritten' >&2
+            exit 1
+          fi
+
+          printf '%s\n' '# >>> AD5X IFS Spoolman update manager >>>' '[update_manager ad5x_ifs_spoolman]' | sudo tee "$CONF" >/dev/null
+          if sudo ./scripts/update_manager_hook.sh install; then
+            echo 'malformed managed block was overwritten' >&2
+            exit 1
+          fi
+
+      - name: Keep disabled runtime disabled during source update
+        run: |
+          CONF=/usr/data/config/mod_data/user.moonraker.conf
+          sudo rm -rf /usr/data/config/mod_data/ifs_spoolman
+          printf '%s\n' '# user settings stay here' | sudo tee "$CONF" >/dev/null
+
+          sudo ./update.sh
+
+          test ! -e /usr/data/config/mod_data/ifs_spoolman
+          grep -Fx '# user settings stay here' "$CONF"
+          grep -Fx '[update_manager ad5x_ifs_spoolman]' "$CONF"
+          grep -Fx 'channel: stable' "$CONF"
+          grep -Fx 'primary_branch: release/standalone-0.6.x' "$CONF"
