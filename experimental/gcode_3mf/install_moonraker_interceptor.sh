@@ -19,6 +19,7 @@ MARK_END="# <<< AD5X GCODE3MF EXPERIMENTAL <<<"
 find_component_dir_chroot() {
     chroot "$CHROOT" /bin/sh -c '
         for d in \
+            /root/moonraker-env/moonraker/components \
             /root/moonraker/moonraker/components \
             /usr/data/zmod/moonraker/moonraker/components \
             /opt/moonraker/moonraker/components
@@ -35,7 +36,17 @@ find_component_dir_chroot() {
 COMPONENT_DIR="$(find_component_dir_chroot || true)"
 [ -n "$COMPONENT_DIR" ] || {
     echo "Moonraker component directory not found inside live Z-Mod chroot" >&2
-    echo "Checked: /root/moonraker/moonraker/components, /usr/data/zmod/moonraker/moonraker/components, /opt/moonraker/moonraker/components" >&2
+    echo "Checked: /root/moonraker-env/moonraker/components, /root/moonraker/moonraker/components, /usr/data/zmod/moonraker/moonraker/components, /opt/moonraker/moonraker/components" >&2
+    echo "Diagnostic:" >&2
+    chroot "$CHROOT" /bin/sh -c '
+        echo "python:" >&2
+        /root/moonraker-env/bin/python3 -c "import sys; print(sys.executable); print(chr(10).join(sys.path))" 2>&1 >&2 || true
+        echo "moonraker-like dirs:" >&2
+        for base in /root /usr/data /opt; do
+            [ -d "$base" ] || continue
+            find "$base" -type d -name components 2>/dev/null | grep moonraker | head -n 20 >&2 || true
+        done
+    ' || true
     exit 1
 }
 
@@ -92,8 +103,7 @@ cache_subdir: .zmod/gcode_3mf
 EOF
 mv "$TMP" "$USER_CONF"
 
-# Create the link from inside the same chroot Moonraker runs in.  This avoids
-# assuming which host-side path backs /root/moonraker on a particular Z-Mod build.
+# Create the link from inside the same chroot Moonraker runs in.
 chroot "$CHROOT" /bin/sh -c 'ln -sfn "$1" "$2"' sh \
     "$CHROOT_RUNTIME/$COMPONENT_NAME" "$COMPONENT_LINK"
 
