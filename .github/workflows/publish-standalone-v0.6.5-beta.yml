@@ -1,0 +1,66 @@
+name: Publish standalone v0.6.5-beta
+
+on:
+  push:
+    branches:
+      - ops/publish-standalone-v0.6.5-beta
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish v0.6.5-beta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v0.6.5-beta
+          TARGET_SHA: 630aa5b950cedb43fa7dae2c9da7715746abe4a0
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; nothing to do."
+            exit 0
+          fi
+
+          cat > /tmp/release-notes.md <<'EOF'
+          Beta release of the standalone AD5X IFS Spoolman integration for Z-Mod.
+
+          ### Native Fluidd UI
+          - Replaces the legacy DOM-injected dashboard card with a native Vue/Vuetify Fluidd widget.
+          - Uses the official `ghzserg/fluidd` release line; the current compatibility build targets `v1.37.4`.
+          - Adds automatic daily compatibility builds for new Sergey Fluidd releases plus a manual workflow trigger.
+          - Installs the matching native Fluidd compatibility build automatically during normal plugin install/update.
+          - Automatically restores native integration after a stock Fluidd update when a compatible build is available.
+          - Keeps legacy injection only as a fail-safe fallback when native integration is unavailable.
+          - Cleans old legacy script tags/assets during migration so only one IFS card remains.
+
+          ### Reliability
+          - Preserves the standalone reboot/cold-start fix from `v0.6.4-beta`.
+          - Preserves exact managed-file update rollback, including `power_on.sh` state.
+          - Native Fluidd installation validates upstream identity, patch revision, and SHA256 before activation.
+          - Native Fluidd rollback preserves the stock Fluidd release of the same upstream version.
+
+          ### Install or update
+          Connect to the printer over SSH as `root` and run:
+
+          ```sh
+          rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/release/standalone-0.6.x/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+          ```
+
+          The same command performs a clean installation or safely updates an existing installation. Existing `config.json` and `assignments.json` are preserved.
+
+          ### Validation
+          The release candidate was validated on real AD5X hardware through the normal one-command update path. Native Fluidd patch 4 installed successfully, legacy injection was removed, the UI displayed as `AD5X IFS Spoolman`, and a printer reboot completed with the backend connected and only the native card present.
+
+          Source commit: `630aa5b950cedb43fa7dae2c9da7715746abe4a0`.
+          EOF
+
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "AD5X IFS Spoolman v0.6.5-beta" \
+            --notes-file /tmp/release-notes.md \
+            --latest
