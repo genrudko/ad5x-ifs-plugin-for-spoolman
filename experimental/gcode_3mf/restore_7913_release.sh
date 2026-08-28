@@ -2,7 +2,9 @@
 set -eu
 DIR="/tmp/ad5x_ifs_3mf_7913"
 PID_FILE="$DIR/test.pid"
-START="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman/scripts/start.sh"
+START="/usr/data/config/mod_data/ifs_spoolman/start.sh"
+
+[ -x "$START" ] || { echo "release runtime start.sh not found: $START" >&2; exit 1; }
 
 if [ -f "$PID_FILE" ]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
