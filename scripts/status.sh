@@ -32,6 +32,30 @@ fluidd_enabled() {
     return 0
 }
 
+legacy_present() {
+    DIR="$1"
+    [ -d "$DIR" ] || return 1
+
+    if [ -f "$DIR/index.html" ] &&
+        grep -Eq 'ifs-spoolman-(card|layout|visibility|dashboard|selection|controls)' "$DIR/index.html"
+    then
+        return 0
+    fi
+
+    for FILE in \
+        "$DIR"/ifs-spoolman-card*.js \
+        "$DIR"/ifs-spoolman-layout*.js \
+        "$DIR"/ifs-spoolman-dashboard*.js \
+        "$DIR"/ifs-spoolman-selection*.js \
+        "$DIR"/ifs-spoolman-visibility*.js \
+        "$DIR"/ifs-spoolman-controls*.js
+    do
+        [ -e "$FILE" ] && return 0
+    done
+
+    return 1
+}
+
 echo "=== $APP_NAME ==="
 
 if [ -f "$APP_DIR/VERSION" ]; then
@@ -123,18 +147,27 @@ else
     done
 
     if [ -n "$MOON_PID" ]; then
-        INDEX="/proc/$MOON_PID/root/root/fluidd/index.html"
-        if [ -f "$INDEX" ]; then
-            for PART in card layout dashboard selection; do
-                if grep -q "ifs-spoolman-$PART" "$INDEX"; then
-                    echo "$PART: installed"
-                else
-                    echo "$PART: not installed"
-                    EXIT_CODE=1
-                fi
-            done
+        FLUIDD_DIR="/proc/$MOON_PID/root/root/fluidd"
+        NATIVE_MARKER="$FLUIDD_DIR/ad5x_ifs_native.json"
+
+        if [ -f "$NATIVE_MARKER" ]; then
+            echo "Native Fluidd: installed"
+            if grep -Eq '"patch_revision"[[:space:]]*:[[:space:]]*[0-9]+' "$NATIVE_MARKER"; then
+                PATCH="$(sed -n 's/.*"patch_revision"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$NATIVE_MARKER" | head -n 1)"
+                [ -n "$PATCH" ] && echo "Native patch revision: $PATCH"
+            fi
+
+            if legacy_present "$FLUIDD_DIR"; then
+                echo "Legacy Fluidd injection: PRESENT (unexpected with native build)"
+                EXIT_CODE=1
+            else
+                echo "Legacy Fluidd injection: clean"
+            fi
+        elif legacy_present "$FLUIDD_DIR"; then
+            echo "Native Fluidd: not installed"
+            echo "Legacy Fluidd fallback: installed"
         else
-            echo "Fluidd index.html: not found"
+            echo "Fluidd integration: not installed"
             EXIT_CODE=1
         fi
     else
