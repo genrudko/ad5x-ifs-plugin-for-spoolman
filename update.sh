@@ -183,12 +183,33 @@ chmod +x "$TARGET_DIR"/*.sh
 "$TARGET_DIR/power_on_hook.sh" install
 
 if ! "$TARGET_DIR/start.sh"; then
+    echo "$APP_NAME: runtime start failed" >&2
     exit 1
 fi
-sleep 3
-if ! wget -qO- http://127.0.0.1:7913/api/health >/dev/null 2>&1; then
+
+HEALTH_OK=0
+i=0
+while [ "$i" -lt 20 ]; do
+    if wget -qO- http://127.0.0.1:7913/api/health 2>/dev/null |
+        grep -F '"application": "AD5X IFS Plugin for Spoolman"' >/dev/null 2>&1
+    then
+        HEALTH_OK=1
+        break
+    fi
+    i=$((i + 1))
+    sleep 1
+done
+
+if [ "$HEALTH_OK" -ne 1 ]; then
+    echo "$APP_NAME: backend API не стал готов за 20 с; rollback." >&2
+    echo "--- ifs_spoolman.log ---" >&2
+    tail -n 50 "$TARGET_DIR/ifs_spoolman.log" >&2 2>/dev/null || true
+    echo "--- events.log ---" >&2
+    tail -n 20 "$TARGET_DIR/events.log" >&2 2>/dev/null || true
     exit 1
 fi
+
+echo "$APP_NAME: backend API ready after ${i}s."
 
 ROLLBACK_ARMED=0
 prune_backups
