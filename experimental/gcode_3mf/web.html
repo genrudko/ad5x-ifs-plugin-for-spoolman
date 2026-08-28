@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AD5X G-code 3MF — Experimental</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #101317; color: #e9eef5; }
+    main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    .sub { color: #9aa7b5; margin-bottom: 22px; }
+    .status { margin: 12px 0 20px; color: #b8c4cf; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(280px,1fr)); gap: 16px; }
+    .card { background: #181d23; border: 1px solid #2b343d; border-radius: 14px; overflow: hidden; }
+    .preview { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: #0d0f12; display: block; }
+    .body { padding: 14px; }
+    .name { font-weight: 700; overflow-wrap: anywhere; margin-bottom: 8px; }
+    .meta { color: #aab5bf; font-size: 13px; line-height: 1.55; min-height: 64px; }
+    .mats { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .mat { padding: 4px 8px; border: 1px solid #39434d; border-radius: 999px; font-size: 12px; }
+    button { margin-top: 12px; width: 100%; border: 0; border-radius: 9px; padding: 9px 12px; cursor: pointer; font-weight: 700; }
+    button:disabled { cursor: default; opacity: .55; }
+    .ok { color: #7fd39a; }
+    .bad { color: #ff9b9b; }
+    .small { font-size: 12px; color: #8693a0; margin-top: 8px; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>AD5X G-code 3MF</h1>
+  <div class="sub">Экспериментальный просмотр sliced 3MF. Печать не запускается.</div>
+  <div id="status" class="status">Загрузка…</div>
+  <div id="grid" class="grid"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const fmtBytes = n => n < 1024*1024 ? (n/1024).toFixed(1)+' KiB' : (n/1024/1024).toFixed(1)+' MiB';
+const fmtTime = s => {
+  s = Number(s || 0);
+  if (!s) return '—';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+  return h ? `${h} ч ${m} мин` : `${m} мин`;
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const q = s => encodeURIComponent(s);
+
+async function loadDetails(card, file) {
+  try {
+    const r = await fetch('/api/inspect?filename='+q(file.filename));
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || 'inspect failed');
+    const plate = d.slice_info?.plate || {};
+    const mats = d.used_filaments || [];
+    card.querySelector('.meta').innerHTML =
+      `Plate: ${esc(d.selected_plate)} · G-code: ${fmtBytes(d.gcode_size)}<br>` +
+      `Время: ${fmtTime(plate.prediction)} · Вес: ${esc(plate.weight || '—')} г<br>` +
+      `MD5: <span class="${d.gcode_md5_valid ? 'ok' : 'bad'}">${d.gcode_md5_valid ? 'OK' : 'FAIL'}</span>`;
+    card.querySelector('.mats').innerHTML = mats.map(m => {
+      const cfg = m.configured || {};
+      return `<span class="mat">${esc(m.type || cfg.type || '?')} · ${esc(m.color || cfg.color || '?')} · ${esc(m.used_g ?? '?')} г</span>`;
+    }).join('');
+    card.querySelector('button').disabled = false;
+  } catch (e) {
+    card.querySelector('.meta').innerHTML = `<span class="bad">${esc(e.message)}</span>`;
+  }
+}
+
+async function prepare(btn, file) {
+  btn.disabled = true;
+  btn.textContent = 'Подготовка…';
+  try {
+    const r = await fetch('/api/prepare', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({filename:file.filename})
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || 'prepare failed');
+    btn.textContent = 'Cache готов';
+    const p = btn.parentElement.querySelector('.small');
+    p.textContent = d.klipper_filename;
+    p.className = 'small ok';
+  } catch (e) {
+    btn.textContent = 'Ошибка';
+    const p = btn.parentElement.querySelector('.small');
+    p.textContent = e.message;
+    p.className = 'small bad';
+    btn.disabled = false;
+  }
+}
+
+async function main() {
+  try {
+    const health = await (await fetch('/api/health')).json();
+    const r = await fetch('/api/files');
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || 'file list failed');
+    $('#status').textContent = `${health.application} v${health.version} · найдено 3MF: ${d.files.length}`;
+    for (const file of d.files) {
+      const card = document.createElement('article');
+      card.className = 'card';
+      card.innerHTML = `
+        <img class="preview" alt="" src="/api/preview?size=large&filename=${q(file.filename)}">
+        <div class="body">
+          <div class="name">${esc(file.filename)}</div>
+          <div class="meta">Разбор metadata…</div>
+          <div class="mats"></div>
+          <button disabled>Подготовить скрытый G-code</button>
+          <div class="small">${fmtBytes(file.size)}</div>
+        </div>`;
+      $('#grid').appendChild(card);
+      card.querySelector('button').addEventListener('click', () => prepare(card.querySelector('button'), file));
+      loadDetails(card, file);
+    }
+  } catch (e) {
+    $('#status').innerHTML = `<span class="bad">${esc(e.message)}</span>`;
+  }
+}
+main();
+</script>
+</body>
+</html>
