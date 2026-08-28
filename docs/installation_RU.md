@@ -1,4 +1,4 @@
-# Установка и обновление на чистом Z-Mod
+# Установка и обновление на Z-Mod
 
 [English](installation.md)
 
@@ -20,135 +20,127 @@ wget -qO- http://127.0.0.1:7125/server/spoolman/status
 "spoolman_connected": true
 ```
 
-Пока возвращается `false`, ошибка или пустой ответ, устанавливать или обновлять плагин рано.
+## 2. Первичная установка: одна команда по SSH
 
-## 2. Рекомендуемая команда для установки и обновления
-
-Подключитесь к принтеру по SSH как `root` и вставьте:
+Подключитесь к принтеру как `root` и выполните:
 
 ```sh
 rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/release/standalone-0.6.x/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
 
-`release/standalone-0.6.x` — отдельная поддерживаемая линия исходного standalone-плагина. Экспериментальные Filament Manager ветки в неё не входят.
+`release/standalone-0.6.x` — поддерживаемая линия standalone-плагина. Параметр `?cb=$(date +%s)` защищает от старой закэшированной копии bootstrap-скрипта.
 
-Параметр `?cb=$(date +%s)` добавляет уникальное значение к URL и не позволяет прокси или CDN вернуть старую закэшированную версию установщика.
+Bootstrap делает только первичную привязку к Z-Mod:
 
-Этот способ рассчитан именно на **чистый Z-Mod**:
+1. проверяет Moonraker и Spoolman;
+2. регистрирует управляемый блок `[update_manager ad5x_ifs_spoolman]` в `/usr/data/config/mod_data/user.moonraker.conf`;
+3. создаёт Git checkout в `/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman` через Git внутри окружения Z-Mod;
+4. включает плагин через штатный `plugins.sh` Z-Mod;
+5. если обнаружен старый raw-file runtime, переводит его на новую схему через транзакционный `update.sh`;
+6. сохраняет пользовательские `config.json`, `assignments.json`, `power_on.sh` и Moonraker-конфиг;
+7. устанавливает/восстанавливает нативную интеграцию Fluidd.
 
-- не требует установленного `git`;
-- использует штатный `wget`;
-- не использует `codeload.github.com`, с которым встроенный TLS-клиент Z-Mod может разрывать соединение;
-- загружает необходимые файлы напрямую с `raw.githubusercontent.com`;
-- добавляет cache-busting к каждому файлу;
-- проверяет Moonraker и подключение Spoolman до изменения файлов;
-- автоматически определяет новую или существующую установку;
-- регистрирует автозапуск через штатный пользовательский `mod_data/power_on.sh` Z-Mod.
-
-Автозапуск добавляется в отдельном отмеченном блоке. Существующее пользовательское содержимое `power_on.sh` не заменяется. Повторная установка обновляет тот же блок и не создаёт дубликаты.
-
-### Когда плагин ещё не установлен
-
-Скрипт запускает `install.sh` и устанавливает плагин в:
+Runtime остаётся отдельно:
 
 ```text
 /usr/data/config/mod_data/ifs_spoolman
 ```
 
-### Когда плагин уже установлен
-
-Скрипт запускает `update.sh`, который:
-
-1. создаёт резервную копию рабочих файлов, `config.json` и `assignments.json`;
-2. останавливает только процесс плагина;
-3. копирует новую версию;
-4. восстанавливает/обновляет штатный boot-hook;
-5. запускает плагин;
-6. проверяет `/api/health`;
-7. автоматически восстанавливает предыдущую версию при ошибке.
-
-Существующие настройки и назначения катушек сохраняются. Klipper, MCU, Moonraker, Spoolman и сам Z-Mod не удаляются и не переустанавливаются.
-
-После успешной установки или обновления откройте:
+Git source:
 
 ```text
-http://IP_ПРИНТЕРА:7913/
+/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman
 ```
 
-Проверьте состояние:
+## 3. Все следующие обновления — через Fluidd
 
-```sh
-/usr/data/config/mod_data/ifs_spoolman/status.sh
+После регистрации updater повторно запускать SSH-команду не требуется.
+
+Откройте:
+
+**Fluidd → Обновления ПО → ad5x_ifs_spoolman**
+
+и нажмите **Обновление**.
+
+Moonraker выполняет Git update source checkout, после чего Z-Mod вызывает корневой `update.sh` из репозитория. `update.sh`:
+
+1. создаёт резервную копию управляемого runtime и внешних файлов, которые меняет плагин;
+2. останавливает только backend плагина;
+3. применяет новую версию runtime;
+4. восстанавливает/обновляет boot-hook;
+5. запускает backend;
+6. проверяет `/api/health` через Python Moonraker и валидирует поле `application`;
+7. при ошибке автоматически возвращает предыдущий рабочий runtime.
+
+Существующие настройки и назначения катушек сохраняются.
+
+## 4. Почему update_manager использует `channel: dev`
+
+Это **не означает экспериментальную пользовательскую ветку**. Пользовательская линия жёстко закреплена за `release/standalone-0.6.x`.
+
+Причина техническая: Z-Mod для plugin updater с `channel: stable` выполняет generic `reset_git.sh`, который сбрасывает checkout к глобально последнему Git-тегу. В репозитории есть отдельный non-version тег `fluidd-compatibility`, поэтому такой reset может выбрать не релиз standalone-плагина.
+
+Поэтому production bootstrap регистрирует:
+
+```ini
+[update_manager ad5x_ifs_spoolman]
+type: git_repo
+channel: dev
+path: /root/printer_data/config/mod_data/plugins/ad5x_ifs_spoolman
+origin: https://github.com/genrudko/ad5x-ifs-plugin-for-spoolman.git
+is_system_service: False
+primary_branch: release/standalone-0.6.x
 ```
 
-`status.sh` проверяет процесс, принадлежность PID, отсутствие дубликатов backend, boot-hook, API и компоненты Fluidd-интеграции. Также показывает последние записи `boot.log` и `events.log`.
+Стабильность контролируется release-веткой, а `channel: dev` используется только как branch-tracking режим Moonraker.
 
-## 3. Автозапуск и порядок старта Z-Mod
+## 5. Автозапуск
 
-Z-Mod выполняет пользовательский код включения из:
+Плагин добавляет только собственный отмеченный блок в:
 
 ```text
 /usr/data/config/mod_data/power_on.sh
 ```
 
-Плагин добавляет туда только собственный блок между маркерами `AD5X IFS Plugin for Spoolman`. Блок запускает `ifs_spoolman/start.sh` в фоне, поэтому не блокирует остальные пользовательские действия при старте.
+Чужой пользовательский код не заменяется. После холодного старта backend автоматически поднимается и сам восстанавливает связь с Moonraker/Spoolman, если они стали доступны чуть позже.
 
-`start.sh` допускает обычную гонку загрузки и ждёт появления процесса Moonraker до 120 секунд. Внутри Z-Mod backend дополнительно ждёт готовности HTTP API Moonraker, но после таймаута всё равно запускается: цикл мониторинга сам восстановит связь, когда Moonraker/Spoolman станет доступен.
-
-## 4. Почему не используется архив codeload.github.com
-
-На некоторых сборках чистого Z-Mod встроенный `wget` успешно подключается к `raw.githubusercontent.com`, но получает TLS alert 80 или `Connection reset by peer` при скачивании архива с `codeload.github.com`.
-
-Поэтому рекомендуемый установщик не скачивает ZIP/TAR-архив и не распаковывает его. Он получает только необходимые файлы напрямую с raw-домена.
-
-## 5. Установка через git clone
-
-Используйте этот вариант только когда команда `git --version` действительно работает на принтере.
-
-Новая установка:
+## 6. Проверка состояния
 
 ```sh
-cd /usr/data
-rm -rf ad5x-ifs-plugin-for-spoolman
-git clone --branch release/standalone-0.6.x https://github.com/genrudko/ad5x-ifs-plugin-for-spoolman.git
-cd ad5x-ifs-plugin-for-spoolman
-chmod +x install.sh update.sh scripts/*.sh
-./install.sh
-```
-
-Обновление существующей установки:
-
-```sh
-cd /usr/data/ad5x-ifs-plugin-for-spoolman
-git pull
-./update.sh --dry-run
-./update.sh
-```
-
-На чистом Z-Mod `git` может отсутствовать. В этом случае ничего дополнительно устанавливать не требуется — используйте рекомендуемую команду через `wget`.
-
-## 6. Управление сервисом
-
-```sh
-/usr/data/config/mod_data/ifs_spoolman/start.sh
-/usr/data/config/mod_data/ifs_spoolman/stop.sh
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
-`start.sh` и `stop.sh` проверяют командную строку процесса, а не только существование PID. Это защищает от ложного «уже запущен» и от остановки постороннего процесса после повторного использования PID.
+Ожидается:
 
-## 7. Удаление
+- `Package version: 0.6.6-beta`;
+- `Status: RUNNING`;
+- API `status: ok`;
+- Spoolman connected;
+- `Native Fluidd: installed` при доступной совместимой сборке;
+- `Legacy Fluidd injection: clean` при нативной интеграции.
 
-С резервной копией настроек и журналов:
+## 7. Проверенная совместимость
+
+Релиз `0.6.6-beta` аппаратно проверен на AD5X с Z-Mod `1.7.3-1`:
+
+- миграция Z-Mod пережита без потери runtime/config/assignments;
+- Git update через Moonraker успешно вызвал `update.sh`;
+- health gate прошёл;
+- после реального cold boot updater снова появился во Fluidd;
+- следующее обновление было обнаружено и установлено из Fluidd.
+
+## 8. Отключение и удаление
+
+Z-Mod `DISABLE_PLUGIN` удаляет include и вызывает корневой `uninstall.sh`. Git checkout не удаляется самим `plugins.sh`, поэтому source/update-manager сохраняются для последующего включения.
+
+Ручное удаление runtime с сохранением пользовательских данных:
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes
 ```
 
-Полное удаление без сохранения пользовательских данных:
+Полное удаление runtime вместе с данными:
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes --purge
 ```
-
-Удаление сначала убирает только управляемый блок плагина из `mod_data/power_on.sh`, затем останавливает backend и удаляет Fluidd-интеграцию. Чужой пользовательский код в `power_on.sh` не удаляется.

@@ -41,6 +41,7 @@ jobs:
           grep -F 'type: git_repo' scripts/update_manager_hook.sh
           grep -F 'primary_branch: $PRIMARY_BRANCH' scripts/update_manager_hook.sh
           grep -F 'channel: $CHANNEL' scripts/update_manager_hook.sh
+          grep -F 'AD5X_IFS_UPDATE_CHANNEL:-dev' scripts/update_manager_hook.sh
           ! grep -F 'plugin/ifs_spoolman.py' zmod-install.sh
 
       - name: Exercise update-manager block ownership
@@ -99,5 +100,5 @@ jobs:
           test ! -e /usr/data/config/mod_data/ifs_spoolman
           grep -Fx '# user settings stay here' "$CONF"
           grep -Fx '[update_manager ad5x_ifs_spoolman]' "$CONF"
-          grep -Fx 'channel: stable' "$CONF"
+          grep -Fx 'channel: dev' "$CONF"
           grep -Fx 'primary_branch: release/standalone-0.6.x' "$CONF"

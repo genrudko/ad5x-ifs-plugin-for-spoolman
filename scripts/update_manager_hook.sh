@@ -9,7 +9,10 @@ END_MARKER="# <<< AD5X IFS Spoolman update manager <<<"
 SECTION="[update_manager $PLUGIN_NAME]"
 ORIGIN="${AD5X_IFS_ORIGIN:-https://github.com/genrudko/ad5x-ifs-plugin-for-spoolman.git}"
 PRIMARY_BRANCH="${AD5X_IFS_PRIMARY_BRANCH:-release/standalone-0.6.x}"
-CHANNEL="${AD5X_IFS_UPDATE_CHANNEL:-stable}"
+# Z-Mod's stable plugin channel resets to the globally latest tag. This repo
+# also has non-version tags, so production follows the controlled release branch
+# through Moonraker's dev branch-tracking mode.
+CHANNEL="${AD5X_IFS_UPDATE_CHANNEL:-dev}"
 MOONRAKER_PATH="/root/printer_data/config/mod_data/plugins/$PLUGIN_NAME"
 
 fail() {

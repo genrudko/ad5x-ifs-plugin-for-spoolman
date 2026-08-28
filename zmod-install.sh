@@ -14,13 +14,11 @@ MOONRAKER_URL="http://127.0.0.1:7125"
 NATIVE_PATCH_REVISION="4"
 HOOK_TMP="/tmp/ad5x-ifs-update-manager-hook.sh"
 
-if [ -n "${AD5X_IFS_UPDATE_CHANNEL:-}" ]; then
-    UPDATE_CHANNEL="$AD5X_IFS_UPDATE_CHANNEL"
-elif [ "$REF" = "release/standalone-0.6.x" ]; then
-    UPDATE_CHANNEL="stable"
-else
-    UPDATE_CHANNEL="dev"
-fi
+# Z-Mod's stable plugin channel hard-resets a plugin checkout to the globally
+# latest Git tag. This repository also carries non-version compatibility tags,
+# so the supported release branch deliberately uses Moonraker's dev tracking
+# mode. Release stability is controlled by REF=release/standalone-0.6.x.
+UPDATE_CHANNEL="${AD5X_IFS_UPDATE_CHANNEL:-dev}"
 
 fail() {
     echo "ОШИБКА: $*" >&2

@@ -24,26 +24,25 @@ See the [mandatory Spoolman setup guide](docs/spoolman.md).
 - Detects the active AD5X IFS slot.
 - Maps four IFS slots to Spoolman spool IDs.
 - Updates Moonraker's active spool after a confirmed slot change.
-- Debounces sensor readings with configurable confirmation reads.
+- Debounces sensor readings and retries failed synchronization.
 - Avoids redundant spool-switch requests.
-- Retries failed synchronization and applies a switch cooldown.
 - Provides a standalone web interface on port `7913`.
-- Adds an **AD5X IFS** card and layout controls to Fluidd.
-- Exposes status, configuration and health API endpoints.
-- Writes a rotating structured event log.
-- Registers a Z-Mod-native startup hook in user-managed `mod_data/power_on.sh` without replacing unrelated user content.
-- Includes install, update, status and uninstall scripts.
+- Adds a native **AD5X IFS Spoolman** Fluidd card with legacy fallback only when needed.
+- Exposes status, configuration and health API endpoints plus a rotating structured event log.
+- Registers a Z-Mod-native startup hook in user-managed `mod_data/power_on.sh`.
+- Uses a persistent Git-managed Z-Mod plugin checkout: after the one-time SSH bootstrap, future updates are delivered through Moonraker/Fluidd Update Manager.
+- Applies runtime updates transactionally with backup, health validation, and automatic rollback.
 
 ## Requirements
 
 - Flashforge AD5X / Adventurer 5X.
-- Clean Z-Mod installation with working Moonraker and Fluidd.
+- Z-Mod with working Moonraker and Fluidd. Validated on Z-Mod `1.7.3-1`.
 - Spoolman installed and configured beforehand.
 - Active Moonraker-to-Spoolman connection.
-- Root SSH access to the printer.
-- Printer access to `raw.githubusercontent.com`.
+- Root SSH access for the first installation.
+- Printer access to GitHub/raw.githubusercontent.com.
 
-## One command for installation and update
+## One SSH command for the first installation
 
 Connect over SSH as `root` and run:
 
@@ -51,28 +50,38 @@ Connect over SSH as `root` and run:
 rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/release/standalone-0.6.x/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
 ```
 
-The `?cb=$(date +%s)` parameter prevents an old cached installer from being returned.
+The `?cb=$(date +%s)` parameter prevents an old cached bootstrap script from being returned.
 
-The helper:
+The bootstrap:
 
-- verifies Moonraker and Spoolman;
-- downloads only files from the `release/standalone-0.6.x` maintenance line;
-- downloads only the required files directly from `raw.githubusercontent.com`;
-- does not require git or `codeload.github.com`;
-- adds cache-busting to every downloaded file;
-- registers an idempotent startup block in `mod_data/power_on.sh` while preserving surrounding user code;
-- installs a new copy through `install.sh`;
-- updates an existing copy through `update.sh`, including backup, health check, and automatic rollback.
+- verifies Moonraker and the live Spoolman connection;
+- registers `[update_manager ad5x_ifs_spoolman]` in user-managed `mod_data/user.moonraker.conf`;
+- creates a persistent Git checkout at `mod_data/plugins/ad5x_ifs_spoolman` through the Z-Mod environment;
+- enables the plugin through Z-Mod's supported `plugins.sh` path;
+- migrates an older raw-file installation through the safe transactional `update.sh`, preserving `config.json`, `assignments.json`, `power_on.sh`, and the user Moonraker configuration;
+- installs/restores the native Fluidd integration.
 
-`config.json` and `assignments.json` are preserved during updates. Klipper, the MCU, Moonraker, Spoolman, and Z-Mod are not reinstalled or removed.
-
-Open the management UI at:
+Persistent Git source:
 
 ```text
-http://PRINTER_IP:7913/
+/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman
 ```
 
-Detailed instructions: [docs/installation.md](docs/installation.md).
+Runtime:
+
+```text
+/usr/data/config/mod_data/ifs_spoolman
+```
+
+## Future updates are delivered from Fluidd
+
+After Moonraker has registered the updater, SSH is no longer required for normal updates:
+
+**Fluidd → Software Updates → ad5x_ifs_spoolman → Update**.
+
+Moonraker updates the Git checkout and Z-Mod invokes the repository `update.sh`. Runtime changes are applied transactionally; `config.json` and `assignments.json` are preserved. If startup or the health gate fails, the previously working runtime is restored automatically.
+
+The supported user line is `release/standalone-0.6.x`. Its internal Moonraker channel is intentionally registered as `dev` so Z-Mod follows exactly that branch instead of performing its generic stable-channel reset to an unrelated non-version Git tag.
 
 ## Status
 
@@ -80,39 +89,35 @@ Detailed instructions: [docs/installation.md](docs/installation.md).
 /usr/data/config/mod_data/ifs_spoolman/status.sh
 ```
 
-`status.sh` also checks the Z-Mod startup hook, backend PID ownership, HTTP API, and all four injected Fluidd components.
+`status.sh` checks package version, startup hook, backend process, HTTP API, Spoolman synchronization, native Fluidd integration, and absence of a legacy duplicate.
 
-## Manual update
+## Web UI
 
-From a refreshed checkout of **`release/standalone-0.6.x`**:
-
-```sh
-./update.sh --dry-run
-./update.sh
+```text
+http://PRINTER_IP:7913/
 ```
 
-The updater creates a timestamped backup and rolls back automatically if startup or the health check fails.
+## Disable and uninstall
 
-## Uninstall
+Z-Mod `DISABLE_PLUGIN` invokes the root `uninstall.sh`: the active runtime is removed while the Git checkout and updater registration remain available for a later normal enable.
 
-Keep user data and diagnostic logs in a separate backup directory:
+Manual runtime removal while preserving user data:
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes
 ```
 
-Permanently remove plugin data:
+Full runtime/data removal:
 
 ```sh
 /usr/data/config/mod_data/ifs_spoolman/uninstall.sh --yes --purge
 ```
 
-Uninstall removes only the plugin-managed block from `mod_data/power_on.sh`; unrelated user code is preserved.
-
 ## Versions
 
-- Package/tooling: `0.6.4-beta`
-- Backend: `0.5.1-beta`
+- Package/runtime: `0.6.6-beta`
+- Validated Z-Mod line: `1.7.3-1`
+- Validated native Fluidd integration: `v1.37.4`, patch revision 4
 
 ## Documentation
 

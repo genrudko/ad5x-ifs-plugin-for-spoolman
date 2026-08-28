@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.6.6-beta — 2026-08-28
+
+### Added
+
+- Migrated the plugin to Z-Mod's native Git-managed model with a persistent checkout in `mod_data/plugins/ad5x_ifs_spoolman`.
+- After the one-time SSH bootstrap, future updates are delivered through Moonraker/Fluidd Update Manager without rerunning the installer.
+- Added `ad5x_ifs_spoolman.cfg`, a root `uninstall.sh`, and owned registration of `[update_manager ad5x_ifs_spoolman]`.
+- Existing raw-file installs migrate through the transactional `update.sh` while preserving `config.json`, `assignments.json`, `power_on.sh`, and `user.moonraker.conf`.
+- Updating the source checkout while the runtime is disabled no longer re-enables it implicitly.
+
+### Fixed
+
+- Backend runtime version is now stamped from package `VERSION`, so API and package reporting stay consistent.
+- `status.sh` correctly detects the native Fluidd integration and separately checks for unexpected legacy injection.
+- The update health gate no longer depends on the embedded `wget`; it uses Moonraker's Python plus `urllib.request` and validates the JSON `application` field.
+- The production line follows `release/standalone-0.6.x` with Moonraker `channel: dev`. This is intentional because Z-Mod's `stable` plugin path performs a generic reset to the globally latest Git tag, while this repository also contains a separate Fluidd compatibility tag.
+
+### Real AD5X validation
+
+- The full Git update path was validated on real hardware before and after migration to Z-Mod `1.7.3-1`.
+- Verified `git fetch/pull -> update.sh -> runtime apply -> health gate`, preserved spool assignments, and working Spoolman synchronization.
+- After a real cold boot on Z-Mod `1.7.3-1`, the plugin started automatically, Moonraker re-registered the updater, Fluidd discovered the next update, and the update completed successfully.
+
+## 0.6.5-beta — 2026-08-28
+
+### Added
+
+- Native Vue/Vuetify Fluidd card replacing the primary legacy DOM injection.
+- Automatic compatibility path for the official `ghzserg/fluidd` release line; the current validated build targets Fluidd `v1.37.4`, patch revision 4.
+- Legacy injection remains only as a fallback and is cleaned automatically when native integration succeeds.
+
+### Real AD5X validation
+
+- After a printer reboot the backend started automatically and Fluidd displayed exactly one native `AD5X IFS Spoolman` card.
+
 ## 0.6.4-beta — 2026-08-27
 
 ### Fixed
