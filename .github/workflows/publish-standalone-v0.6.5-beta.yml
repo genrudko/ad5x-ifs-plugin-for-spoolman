@@ -12,7 +12,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Publish v0.6.5-beta
+      - name: Publish or update v0.6.5-beta
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: v0.6.5-beta
@@ -20,12 +20,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; nothing to do."
-            exit 0
-          fi
-
           cat > /tmp/release-notes.md <<'EOF'
+          ## English
+
           Beta release of the standalone AD5X IFS Spoolman integration for Z-Mod.
 
           ### Native Fluidd UI
@@ -55,12 +52,53 @@ jobs:
           ### Validation
           The release candidate was validated on real AD5X hardware through the normal one-command update path. Native Fluidd patch 4 installed successfully, legacy injection was removed, the UI displayed as `AD5X IFS Spoolman`, and a printer reboot completed with the backend connected and only the native card present.
 
-          Source commit: `630aa5b950cedb43fa7dae2c9da7715746abe4a0`.
+          ---
+
+          ## Русский
+
+          Бета-релиз самостоятельной интеграции AD5X IFS Spoolman для Z-Mod.
+
+          ### Нативный интерфейс Fluidd
+          - Старая карточка, внедряемая в DOM готового Fluidd, заменена на нативный Vue/Vuetify-виджет Fluidd.
+          - Используется официальная ветка релизов `ghzserg/fluidd`; текущая совместимая сборка предназначена для `v1.37.4`.
+          - Добавлена автоматическая ежедневная проверка новых релизов Fluidd Сергея и ручной запуск сборки при необходимости.
+          - Подходящая нативная сборка Fluidd устанавливается автоматически при обычной установке или обновлении плагина.
+          - После штатного обновления Fluidd нативная интеграция автоматически восстанавливается, когда совместимая сборка уже доступна.
+          - Старый HTML/DOM-инжект оставлен только как аварийный fallback, если нативная интеграция недоступна.
+          - При переходе со старых версий автоматически удаляются старые script-теги и JS-файлы, поэтому в Fluidd остаётся только одна карточка IFS.
+
+          ### Надёжность
+          - Сохранено исправление автозапуска после перезагрузки и холодного включения из `v0.6.4-beta`.
+          - Сохранён точный rollback управляемого состояния при неудачном обновлении, включая состояние `power_on.sh`.
+          - Перед активацией нативной сборки Fluidd проверяются upstream-идентичность, версия patch и SHA256.
+          - Для отката сохраняется штатный Fluidd той же upstream-версии.
+
+          ### Установка или обновление
+          Подключитесь к принтеру по SSH под `root` и выполните:
+
+          ```sh
+          rm -f /tmp/ad5x-ifs-install.sh && wget -qO /tmp/ad5x-ifs-install.sh "https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/release/standalone-0.6.x/zmod-install.sh?cb=$(date +%s)" && chmod +x /tmp/ad5x-ifs-install.sh && /tmp/ad5x-ifs-install.sh
+          ```
+
+          Одна и та же команда выполняет чистую установку или безопасно обновляет существующую. Текущие `config.json` и `assignments.json` сохраняются.
+
+          ### Проверка на реальном AD5X
+          Релизный кандидат проверен на реальном AD5X через обычный путь обновления одной командой. Нативный Fluidd patch 4 установился успешно, старый инжект был удалён, карточка отображалась как `AD5X IFS Spoolman`, а после перезагрузки принтера backend автоматически поднялся и в Fluidd осталась только одна нативная карточка.
+
+          Source commit / исходный commit: `630aa5b950cedb43fa7dae2c9da7715746abe4a0`.
           EOF
 
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$TARGET_SHA" \
-            --title "AD5X IFS Spoolman v0.6.5-beta" \
-            --notes-file /tmp/release-notes.md \
-            --latest
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "AD5X IFS Spoolman v0.6.5-beta" \
+              --notes-file /tmp/release-notes.md \
+              --latest
+          else
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$TARGET_SHA" \
+              --title "AD5X IFS Spoolman v0.6.5-beta" \
+              --notes-file /tmp/release-notes.md \
+              --latest
+          fi
