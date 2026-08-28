@@ -188,13 +188,17 @@ if ! "$TARGET_DIR/start.sh"; then
 fi
 
 HEALTH_OK=0
+HEALTH_TMP="$BACKUP_DIR/health.json"
 i=0
 while [ "$i" -lt 20 ]; do
-    if wget -qO- http://127.0.0.1:7913/api/health 2>/dev/null |
-        grep -F '"application": "AD5X IFS Plugin for Spoolman"' >/dev/null 2>&1
-    then
-        HEALTH_OK=1
-        break
+    rm -f "$HEALTH_TMP"
+    if wget -qO "$HEALTH_TMP" http://127.0.0.1:7913/api/health 2>/dev/null; then
+        if grep -F '"application"' "$HEALTH_TMP" >/dev/null 2>&1 &&
+            grep -F "$APP_NAME" "$HEALTH_TMP" >/dev/null 2>&1
+        then
+            HEALTH_OK=1
+            break
+        fi
     fi
     i=$((i + 1))
     sleep 1
@@ -202,6 +206,8 @@ done
 
 if [ "$HEALTH_OK" -ne 1 ]; then
     echo "$APP_NAME: backend API не стал готов за 20 с; rollback." >&2
+    echo "--- last health response ---" >&2
+    cat "$HEALTH_TMP" >&2 2>/dev/null || true
     echo "--- ifs_spoolman.log ---" >&2
     tail -n 50 "$TARGET_DIR/ifs_spoolman.log" >&2 2>/dev/null || true
     echo "--- events.log ---" >&2
