@@ -3,19 +3,25 @@ set -eu
 
 RUNTIME="/usr/data/config/mod_data/gcode_3mf_exp"
 USER_CONF="/usr/data/config/mod_data/user.moonraker.conf"
+CHROOT="/usr/data/.mod/.zmod"
+COMPONENT_NAME="gcode_3mf.py"
 MARK_BEGIN="# >>> AD5X GCODE3MF EXPERIMENTAL >>>"
 MARK_END="# <<< AD5X GCODE3MF EXPERIMENTAL <<<"
 
-find_component_link() {
-    for p in \
-        /usr/data/zmod/moonraker/moonraker/components/gcode_3mf.py \
-        /usr/data/.mod/.zmod/root/moonraker/moonraker/components/gcode_3mf.py
-    do
-        [ -e "$p" ] || [ -L "$p" ] || continue
-        echo "$p"
-        return 0
-    done
-    return 1
+find_component_dir_chroot() {
+    chroot "$CHROOT" /bin/sh -c '
+        for d in \
+            /root/moonraker/moonraker/components \
+            /usr/data/zmod/moonraker/moonraker/components \
+            /opt/moonraker/moonraker/components
+        do
+            if [ -d "$d" ]; then
+                echo "$d"
+                exit 0
+            fi
+        done
+        exit 1
+    '
 }
 
 if [ -f "$USER_CONF" ]; then
@@ -36,21 +42,23 @@ if [ -f "$USER_CONF" ]; then
     fi
 fi
 
-LINK="$(find_component_link || true)"
-if [ -n "$LINK" ]; then
-    if [ -L "$LINK" ]; then
-        rm -f "$LINK"
-    else
-        echo "Refusing to remove non-symlink Moonraker component: $LINK" >&2
-        exit 1
+COMPONENT_DIR="$(find_component_dir_chroot || true)"
+if [ -n "$COMPONENT_DIR" ]; then
+    LINK="$COMPONENT_DIR/$COMPONENT_NAME"
+    if chroot "$CHROOT" /bin/sh -c '[ -e "$1" ] || [ -L "$1" ]' sh "$LINK"; then
+        if chroot "$CHROOT" /bin/sh -c '[ -L "$1" ]' sh "$LINK"; then
+            chroot "$CHROOT" /bin/sh -c 'rm -f "$1"' sh "$LINK"
+        else
+            echo "Refusing to remove non-symlink Moonraker component: $LINK" >&2
+            exit 1
+        fi
     fi
 fi
 
 echo "Experimental Moonraker 3MF interceptor removed."
 echo "Runtime files and backups kept in $RUNTIME"
-
 echo "=== RESTART MOONRAKER ==="
-chroot /usr/data/.mod/.zmod /etc/init.d/S65moonraker restart
+chroot "$CHROOT" /etc/init.d/S65moonraker restart
 sleep 3
 
 echo "=== MOONRAKER HEALTH ==="
