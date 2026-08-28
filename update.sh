@@ -189,17 +189,41 @@ fi
 
 HEALTH_OK=0
 HEALTH_TMP="$BACKUP_DIR/health.json"
+HEALTH_PYTHON="/root/moonraker-env/bin/python3"
+[ -x "$HEALTH_PYTHON" ] || {
+    echo "$APP_NAME: Moonraker Python не найден: $HEALTH_PYTHON" >&2
+    exit 1
+}
+
 i=0
 while [ "$i" -lt 20 ]; do
     rm -f "$HEALTH_TMP"
-    if wget -qO "$HEALTH_TMP" http://127.0.0.1:7913/api/health 2>/dev/null; then
-        if grep -F '"application"' "$HEALTH_TMP" >/dev/null 2>&1 &&
-            grep -F "$APP_NAME" "$HEALTH_TMP" >/dev/null 2>&1
-        then
-            HEALTH_OK=1
-            break
-        fi
+
+    if "$HEALTH_PYTHON" - "$HEALTH_TMP" <<'PY'
+import json
+import sys
+import urllib.request
+
+output = sys.argv[1]
+url = "http://127.0.0.1:7913/api/health"
+expected = "AD5X IFS Plugin for Spoolman"
+
+try:
+    with urllib.request.urlopen(url, timeout=2.0) as response:
+        raw = response.read()
+    with open(output, "wb") as stream:
+        stream.write(raw)
+    payload = json.loads(raw.decode("utf-8"))
+except Exception:
+    raise SystemExit(1)
+
+raise SystemExit(0 if payload.get("application") == expected else 1)
+PY
+    then
+        HEALTH_OK=1
+        break
     fi
+
     i=$((i + 1))
     sleep 1
 done
