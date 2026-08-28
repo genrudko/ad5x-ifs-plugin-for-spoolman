@@ -7,6 +7,7 @@ PID_FILE="$APP_DIR/ifs_spoolman.pid"
 LOG_FILE="$APP_DIR/ifs_spoolman.log"
 PYTHON="/root/moonraker-env/bin/python3"
 PROGRAM="$APP_DIR/ifs_spoolman.py"
+VERSION_FILE="$APP_DIR/VERSION"
 CONFIG_FILE="$APP_DIR/config.json"
 FLUIDD_NATIVE_MARKER="/root/fluidd/ad5x_ifs_native.json"
 
@@ -87,6 +88,25 @@ if [ ! -f "$PROGRAM" ]; then
     echo "$APP_NAME: не найден backend: $PROGRAM" >&2
     exit 1
 fi
+
+if [ ! -f "$VERSION_FILE" ]; then
+    echo "$APP_NAME: не найден VERSION: $VERSION_FILE" >&2
+    exit 1
+fi
+
+# The backend historically carried its own stale APP_VERSION literal. Runtime
+# package VERSION is authoritative, so stamp the managed runtime copy before
+# launch. The Git source checkout remains pristine for Moonraker update_manager.
+PACKAGE_VERSION="$(cat "$VERSION_FILE" 2>/dev/null || true)"
+[ -n "$PACKAGE_VERSION" ] || {
+    echo "$APP_NAME: VERSION пуст" >&2
+    exit 1
+}
+if ! grep -q '^APP_VERSION = "[^"]*"$' "$PROGRAM"; then
+    echo "$APP_NAME: APP_VERSION marker не найден в backend" >&2
+    exit 1
+fi
+sed -i 's/^APP_VERSION = "[^"]*"$/APP_VERSION = "'"$PACKAGE_VERSION"'"/' "$PROGRAM"
 
 # Do not wait for Moonraker HTTP here. The wrapper already waited for the
 # Moonraker process/chroot; the backend monitor is designed to recover from
