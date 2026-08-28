@@ -4,7 +4,9 @@ set -eu
 APP_NAME="AD5X IFS Plugin for Spoolman"
 TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"
 POWER_ON="/usr/data/config/mod_data/power_on.sh"
+USER_MOONRAKER="/usr/data/config/mod_data/user.moonraker.conf"
 REPO_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+UPDATE_MANAGER_HOOK="$REPO_DIR/scripts/update_manager_hook.sh"
 DRY_RUN=0
 BACKUP_KEEP=5
 
@@ -31,33 +33,45 @@ for FILE in $PLUGIN_FILES; do
         exit 1
     }
 done
-
 for FILE in $SCRIPT_FILES; do
     [ -f "$REPO_DIR/scripts/$FILE" ] || {
         echo "Missing scripts/$FILE"
         exit 1
     }
 done
-
 for FILE in VERSION PACKAGE_MANIFEST.txt; do
     [ -f "$REPO_DIR/$FILE" ] || {
         echo "Missing $FILE"
         exit 1
     }
 done
+[ -x "$UPDATE_MANAGER_HOOK" ] || {
+    echo "Missing scripts/update_manager_hook.sh"
+    exit 1
+}
 
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "$APP_NAME update preflight: OK"
     echo "Source: $REPO_DIR"
     echo "Target: $TARGET_DIR"
     echo "Version: $(cat "$REPO_DIR/VERSION")"
+    if [ -d "$TARGET_DIR" ]; then
+        echo "Runtime: enabled"
+    else
+        echo "Runtime: disabled/not installed; source-only update will be accepted"
+    fi
     exit 0
 fi
 
-[ -d "$TARGET_DIR" ] || {
-    echo "$APP_NAME is not installed."
-    exit 1
-}
+# Moonraker also updates disabled plugin repositories. Keep DISABLE_PLUGIN
+# sticky: update the Git source successfully, but do not recreate the runtime.
+if [ ! -d "$TARGET_DIR" ]; then
+    if ! "$UPDATE_MANAGER_HOOK" present >/dev/null 2>&1; then
+        "$UPDATE_MANAGER_HOOK" install
+    fi
+    echo "$APP_NAME source updated; runtime is disabled, apply skipped."
+    exit 0
+fi
 
 prune_backups() {
     [ -d "$TARGET_DIR/backups" ] || return 0
@@ -115,6 +129,7 @@ for FILE in $TRACKED_FILES; do
     snapshot_path "$TARGET_DIR/$FILE" "$FILE"
 done
 snapshot_path "$POWER_ON" "external-power_on.sh"
+snapshot_path "$USER_MOONRAKER" "external-user.moonraker.conf"
 
 rollback() {
     echo "$APP_NAME: rollback."
@@ -124,6 +139,7 @@ rollback() {
         restore_path "$TARGET_DIR/$FILE" "$FILE"
     done
     restore_path "$POWER_ON" "external-power_on.sh"
+    restore_path "$USER_MOONRAKER" "external-user.moonraker.conf"
 
     if [ -x "$TARGET_DIR/start.sh" ]; then
         "$TARGET_DIR/start.sh" 2>/dev/null || true
@@ -153,13 +169,13 @@ on_signal() {
 trap on_exit EXIT
 trap on_signal HUP INT TERM
 
+if ! "$UPDATE_MANAGER_HOOK" present >/dev/null 2>&1; then
+    "$UPDATE_MANAGER_HOOK" install
+fi
+
 "$TARGET_DIR/stop.sh" || true
-for FILE in $PLUGIN_FILES; do
-    cp "$REPO_DIR/plugin/$FILE" "$TARGET_DIR/$FILE"
-done
-for FILE in $SCRIPT_FILES; do
-    cp "$REPO_DIR/scripts/$FILE" "$TARGET_DIR/$FILE"
-done
+for FILE in $PLUGIN_FILES; do cp "$REPO_DIR/plugin/$FILE" "$TARGET_DIR/$FILE"; done
+for FILE in $SCRIPT_FILES; do cp "$REPO_DIR/scripts/$FILE" "$TARGET_DIR/$FILE"; done
 cp "$REPO_DIR/install.sh" "$TARGET_DIR/install.sh"
 cp "$REPO_DIR/VERSION" "$TARGET_DIR/VERSION"
 cp "$REPO_DIR/PACKAGE_MANIFEST.txt" "$TARGET_DIR/PACKAGE_MANIFEST.txt"
@@ -181,3 +197,5 @@ echo "$APP_NAME updated."
 echo "Backup: $BACKUP_DIR"
 echo "Retained update backups: $BACKUP_KEEP"
 echo "Version: $(cat "$TARGET_DIR/VERSION")"
+echo "Source: $REPO_DIR"
+echo "Delivery: Z-Mod/Moonraker git_repo"

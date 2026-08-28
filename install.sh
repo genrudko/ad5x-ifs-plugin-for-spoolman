@@ -4,6 +4,7 @@ set -eu
 APP_NAME="AD5X IFS Plugin for Spoolman"
 TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"
 REPO_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+UPDATE_MANAGER_HOOK="$REPO_DIR/scripts/update_manager_hook.sh"
 NO_START=0
 
 case "${1:-}" in
@@ -40,6 +41,25 @@ for FILE in VERSION PACKAGE_MANIFEST.txt; do
         exit 1
     }
 done
+[ -x "$UPDATE_MANAGER_HOOK" ] || {
+    echo "$APP_NAME: missing scripts/update_manager_hook.sh"
+    exit 1
+}
+
+# A normal Z-Mod ENABLE_PLUGIN call reaches this script after the source repo
+# has already been registered. Direct Git installs also become managed, but an
+# existing bootstrap-selected dev/stable block is deliberately preserved.
+if ! "$UPDATE_MANAGER_HOOK" present >/dev/null 2>&1; then
+    "$UPDATE_MANAGER_HOOK" install
+fi
+
+# Migration from the historical raw-file installation must go through the
+# transactional updater so config.json, assignments.json, power_on.sh and the
+# currently working runtime can be rolled back on failure.
+if [ -d "$TARGET_DIR" ] && [ -f "$TARGET_DIR/ifs_spoolman.py" ]; then
+    echo "$APP_NAME: existing runtime detected; using safe update path."
+    exec "$REPO_DIR/update.sh"
+fi
 
 mkdir -p "$TARGET_DIR"
 for FILE in $PLUGIN_FILES; do cp "$REPO_DIR/plugin/$FILE" "$TARGET_DIR/$FILE"; done
@@ -63,4 +83,6 @@ fi
 
 echo "$APP_NAME installed."
 echo "Path: $TARGET_DIR"
+echo "Source: $REPO_DIR"
+echo "Updates: Z-Mod/Moonraker git_repo"
 echo "Web UI: http://PRINTER_IP:7913/"
