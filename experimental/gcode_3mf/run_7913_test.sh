@@ -16,6 +16,34 @@ PYTHON="/root/moonraker-env/bin/python3"
 
 mkdir -p "$DIR"
 
+pid_is_combined() {
+    pid="$1"
+    [ -r "/proc/$pid/cmdline" ] || return 1
+    cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+    case "$cmd" in
+        *combined_7913.py*) return 0 ;;
+    esac
+    return 1
+}
+
+stop_existing_combined() {
+    [ -f "$PID_FILE" ] || return 0
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [ -n "$pid" ] && pid_is_combined "$pid"; then
+        kill "$pid" 2>/dev/null || true
+        i=0
+        while pid_is_combined "$pid" && [ "$i" -lt 10 ]; do
+            sleep 1
+            i=$((i + 1))
+        done
+        pid_is_combined "$pid" && kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$PID_FILE"
+}
+
+# Stop the previous experimental owner before replacing its on-disk files.
+stop_existing_combined
+
 for file in combined_7913.py combined.html inspect.py; do
     rm -f "$DIR/$file"
     wget -qO "$DIR/$file" "$BASE/$file?cb=$(date +%s)"
@@ -29,14 +57,15 @@ if [ -f /tmp/gcode_3mf_exp.pid ]; then
     rm -f /tmp/gcode_3mf_exp.pid
 fi
 
-# Exactly one IFS runtime owner at a time.
+# Exactly one IFS runtime owner at a time. This is harmless when the release
+# runtime is already stopped because the combined host owned port 7913.
 "$STOP"
 
 cleanup_failed() {
     echo "Experimental 7913 host failed; restoring release IFS." >&2
     if [ -f "$PID_FILE" ]; then
         pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-        [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+        [ -n "$pid" ] && pid_is_combined "$pid" && kill "$pid" 2>/dev/null || true
     fi
     rm -f "$PID_FILE"
     "$START" || true
@@ -49,7 +78,7 @@ pid=$!
 echo "$pid" >"$PID_FILE"
 
 sleep 2
-if ! kill -0 "$pid" 2>/dev/null; then
+if ! pid_is_combined "$pid"; then
     cleanup_failed
     exit 1
 fi
