@@ -10,6 +10,7 @@ RUNTIME="/usr/data/config/mod_data/ifs_spoolman"
 STOP="$RUNTIME/stop.sh"
 START="$RUNTIME/start.sh"
 PYTHON="/root/moonraker-env/bin/python3"
+ENTRY="combined_7913_v03.py"
 
 [ -x "$STOP" ] || { echo "release runtime stop.sh not found: $STOP" >&2; exit 1; }
 [ -x "$START" ] || { echo "release runtime start.sh not found: $START" >&2; exit 1; }
@@ -21,7 +22,7 @@ pid_is_combined() {
     [ -r "/proc/$pid/cmdline" ] || return 1
     cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
     case "$cmd" in
-        *combined_7913.py*) return 0 ;;
+        *combined_7913.py*|*combined_7913_v03.py*) return 0 ;;
     esac
     return 1
 }
@@ -44,11 +45,11 @@ stop_existing_combined() {
 # Stop the previous experimental owner before replacing its on-disk files.
 stop_existing_combined
 
-for file in combined_7913.py combined.html inspect.py; do
+for file in combined_7913.py combined_7913_v03.py combined_v03.html inspect.py; do
     rm -f "$DIR/$file"
     wget -qO "$DIR/$file" "$BASE/$file?cb=$(date +%s)"
 done
-chmod +x "$DIR/combined_7913.py" "$DIR/inspect.py"
+chmod +x "$DIR/combined_7913.py" "$DIR/combined_7913_v03.py" "$DIR/inspect.py"
 
 # Retire the old standalone 7914 experiment if it still exists.
 if [ -f /tmp/gcode_3mf_exp.pid ]; then
@@ -73,7 +74,7 @@ cleanup_failed() {
 }
 trap cleanup_failed HUP INT TERM
 
-chroot /usr/data/.mod/.zmod "$PYTHON" "$DIR/combined_7913.py" >"$LOG_FILE" 2>&1 &
+chroot /usr/data/.mod/.zmod "$PYTHON" "$DIR/$ENTRY" >"$LOG_FILE" 2>&1 &
 pid=$!
 echo "$pid" >"$PID_FILE"
 
@@ -93,6 +94,7 @@ trap - HUP INT TERM
 echo "=== EXPERIMENTAL 7913 HEALTH ==="
 cat /tmp/ad5x_ifs_3mf_7913.health
 echo
+echo "PREFLIGHT=fixed-slot-v0.3"
 echo "PID=$pid"
 echo "LOG=$LOG_FILE"
 echo "Open: http://PRINTER_IP:7913/"
