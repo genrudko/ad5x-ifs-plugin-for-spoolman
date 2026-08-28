@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+
+BRANCH="feature/gcode-3mf-ifs-preflight"
+BASE="https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/$BRANCH/experimental/gcode_3mf"
+DIR="/tmp/ad5x_ifs_3mf_7913"
+PID_FILE="$DIR/test.pid"
+LOG_FILE="$DIR/test.log"
+STOP="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman/scripts/stop.sh"
+START="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman/scripts/start.sh"
+PYTHON="/root/moonraker-env/bin/python3"
+
+[ -x "$STOP" ] || { echo "release stop.sh not found: $STOP" >&2; exit 1; }
+[ -x "$START" ] || { echo "release start.sh not found: $START" >&2; exit 1; }
+
+mkdir -p "$DIR"
+
+for file in combined_7913.py combined.html inspect.py; do
+    rm -f "$DIR/$file"
+    wget -qO "$DIR/$file" "$BASE/$file?cb=$(date +%s)"
+done
+chmod +x "$DIR/combined_7913.py" "$DIR/inspect.py"
+
+# Retire the old standalone 7914 experiment if it still exists.
+if [ -f /tmp/gcode_3mf_exp.pid ]; then
+    old="$(cat /tmp/gcode_3mf_exp.pid 2>/dev/null || true)"
+    [ -n "$old" ] && kill "$old" 2>/dev/null || true
+    rm -f /tmp/gcode_3mf_exp.pid
+fi
+
+# Exactly one IFS runtime owner at a time.
+"$STOP"
+
+cleanup_failed() {
+    echo "Experimental 7913 host failed; restoring release IFS." >&2
+    if [ -f "$PID_FILE" ]; then
+        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+        [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+    fi
+    rm -f "$PID_FILE"
+    "$START" || true
+    tail -n 80 "$LOG_FILE" 2>/dev/null || true
+}
+trap cleanup_failed HUP INT TERM
+
+chroot /usr/data/.mod/.zmod "$PYTHON" "$DIR/combined_7913.py" >"$LOG_FILE" 2>&1 &
+pid=$!
+echo "$pid" >"$PID_FILE"
+
+sleep 2
+if ! kill -0 "$pid" 2>/dev/null; then
+    cleanup_failed
+    exit 1
+fi
+
+if ! wget -qO /tmp/ad5x_ifs_3mf_7913.health http://127.0.0.1:7913/api/3mf/health; then
+    cleanup_failed
+    exit 1
+fi
+
+trap - HUP INT TERM
+
+echo "=== EXPERIMENTAL 7913 HEALTH ==="
+cat /tmp/ad5x_ifs_3mf_7913.health
+echo
+echo "PID=$pid"
+echo "LOG=$LOG_FILE"
+echo "Open: http://PRINTER_IP:7913/"
