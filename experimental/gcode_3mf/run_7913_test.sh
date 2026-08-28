@@ -6,12 +6,13 @@ BASE="https://raw.githubusercontent.com/genrudko/ad5x-ifs-plugin-for-spoolman/$B
 DIR="/tmp/ad5x_ifs_3mf_7913"
 PID_FILE="$DIR/test.pid"
 LOG_FILE="$DIR/test.log"
-STOP="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman/scripts/stop.sh"
-START="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman/scripts/start.sh"
+RUNTIME="/usr/data/config/mod_data/ifs_spoolman"
+STOP="$RUNTIME/stop.sh"
+START="$RUNTIME/start.sh"
 PYTHON="/root/moonraker-env/bin/python3"
 
-[ -x "$STOP" ] || { echo "release stop.sh not found: $STOP" >&2; exit 1; }
-[ -x "$START" ] || { echo "release start.sh not found: $START" >&2; exit 1; }
+[ -x "$STOP" ] || { echo "release runtime stop.sh not found: $STOP" >&2; exit 1; }
+[ -x "$START" ] || { echo "release runtime start.sh not found: $START" >&2; exit 1; }
 
 mkdir -p "$DIR"
 
