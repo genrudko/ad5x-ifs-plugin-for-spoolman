@@ -74,7 +74,7 @@ for FILE in config assignments; do
     fi
 done
 
-"$REPO_DIR/scripts/update.sh" --recover-only
+sh "$REPO_DIR/scripts/update.sh" --recover-only
 
 chmod +x "$TARGET_DIR"/*.sh
 "$TARGET_DIR/power_on_hook.sh" install

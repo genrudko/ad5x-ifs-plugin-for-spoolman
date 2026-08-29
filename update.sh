@@ -84,7 +84,7 @@ prune_backups() {
     done
 }
 
-"$REPO_DIR/scripts/update.sh" --recover-only
+sh "$REPO_DIR/scripts/update.sh" --recover-only
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"

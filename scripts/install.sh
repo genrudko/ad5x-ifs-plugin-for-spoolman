@@ -74,7 +74,7 @@ if [ "$SOURCE_DIR" != "$TARGET_DIR" ]; then
     done
 fi
 
-"$TARGET_DIR/update.sh" --recover-only
+sh "$TARGET_DIR/update.sh" --recover-only
 
 chmod +x "$TARGET_DIR"/*.sh
 "$TARGET_DIR/power_on_hook.sh" install
