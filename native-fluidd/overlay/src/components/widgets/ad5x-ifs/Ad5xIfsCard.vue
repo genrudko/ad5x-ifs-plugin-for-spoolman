@@ -90,7 +90,7 @@
           </div>
 
           <div v-if="spoolForSlot(slot)" class="ifs-slot__meta">
-            <span class="ifs-slot__pill">ID {{ spoolForSlot(slot).id }}</span>
+            <span class="ifs-slot__pill">ID {{ spoolIdForSlot(slot) }}</span>
             <span class="ifs-slot__pill">{{ materialOf(spoolForSlot(slot)) }}</span>
             <span class="ifs-slot__stock">{{ compactStock(spoolForSlot(slot)) }}</span>
           </div>
@@ -247,6 +247,11 @@ export default Vue.extend({
       const spoolId = this.assignments[String(slot)]
       if (spoolId == null) return null
       return this.spools.find(item => Number(item.id) === Number(spoolId)) || null
+    },
+
+    spoolIdForSlot (slot: number): string {
+      const spool = this.spoolForSlot(slot)
+      return spool ? String(spool.id) : '—'
     },
 
     normalizeHex (value: unknown): string | null {
