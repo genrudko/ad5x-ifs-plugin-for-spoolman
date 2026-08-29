@@ -5,7 +5,7 @@ APP_NAME="AD5X IFS Plugin for Spoolman"
 APP_DIR="/usr/data/config/mod_data/ifs_spoolman"
 INNER_BOOT="/opt/config/mod_data/ifs_spoolman/boot_start.sh"
 WAIT_SECONDS="${IFS_START_WAIT_SECONDS:-120}"
-NATIVE_PATCH_REVISION="4"
+NATIVE_PATCH_REVISION="5"
 NATIVE_LOG="$APP_DIR/fluidd_native.log"
 
 find_moonraker_pid() {
@@ -58,8 +58,13 @@ ROOT="/proc/$MOON_PID/root"
 NATIVE_MARKER="$ROOT/root/fluidd/ad5x_ifs_native.json"
 
 if fluidd_enabled; then
-    if [ ! -f "$NATIVE_MARKER" ] && [ -x "$APP_DIR/install_fluidd_native.sh" ]; then
-        echo "$APP_NAME: native Fluidd integration missing; attempting repair." >>"$NATIVE_LOG" 2>&1 || true
+    INSTALLED_NATIVE_PATCH=""
+    if [ -f "$NATIVE_MARKER" ]; then
+        INSTALLED_NATIVE_PATCH="$(sed -n 's/.*"patch_revision"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$NATIVE_MARKER" | head -n 1)"
+    fi
+
+    if [ "$INSTALLED_NATIVE_PATCH" != "$NATIVE_PATCH_REVISION" ] && [ -x "$APP_DIR/install_fluidd_native.sh" ]; then
+        echo "$APP_NAME: native Fluidd patch ${INSTALLED_NATIVE_PATCH:-missing} -> $NATIVE_PATCH_REVISION; updating." >>"$NATIVE_LOG" 2>&1 || true
         AD5X_IFS_FLUIDD_PATCH_REVISION="$NATIVE_PATCH_REVISION" \
             "$APP_DIR/install_fluidd_native.sh" >>"$NATIVE_LOG" 2>&1 || {
                 echo "$APP_NAME: native Fluidd repair unavailable; legacy integration will be used." \

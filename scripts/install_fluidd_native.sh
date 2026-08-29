@@ -3,6 +3,14 @@ set -eu
 
 APP_NAME="AD5X IFS Plugin for Spoolman"
 PATCH_REVISION="${AD5X_IFS_FLUIDD_PATCH_REVISION:-4}"
+SOURCE_CONFIG="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman/native-fluidd/config.json"
+if [ -z "${AD5X_IFS_FLUIDD_PATCH_REVISION+x}" ] && [ -f "$SOURCE_CONFIG" ]; then
+    SOURCE_PATCH="$(sed -n 's/.*"patch_revision"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$SOURCE_CONFIG" | head -n 1)"
+    case "$SOURCE_PATCH" in
+        ''|*[!0-9]*) ;;
+        *) PATCH_REVISION="$SOURCE_PATCH" ;;
+    esac
+fi
 REPO="genrudko/ad5x-ifs-plugin-for-spoolman"
 RAW_BRANCH="fluidd-compatibility-files"
 CACHE_BUSTER="$(date +%s 2>/dev/null || echo "$$")-$$"

@@ -40,21 +40,24 @@
       </v-alert>
 
       <div class="ifs-slots">
-        <button
+        <div
           v-for="slot in 4"
           :key="`ifs-slot-${slot}`"
-          type="button"
           class="ifs-slot"
           :class="{
-            'ifs-slot--selected': selectedSlot === slot,
             'ifs-slot--active': activeSlot === slot,
             'ifs-slot--assigned': Boolean(spoolForSlot(slot)),
             'ifs-slot--empty': !spoolForSlot(slot)
           }"
-          @click="selectedSlot = slot"
         >
           <div class="ifs-slot__top">
             <span class="ifs-slot__number">{{ slot }}</span>
+            <span
+              class="ifs-slot__name"
+              :title="spoolForSlot(slot) ? nameOf(spoolForSlot(slot)) : ''"
+            >
+              {{ spoolForSlot(slot) ? nameOf(spoolForSlot(slot)) : '—' }}
+            </span>
             <v-icon
               v-if="activeSlot === slot"
               x-small
@@ -62,110 +65,36 @@
             >
               $check
             </v-icon>
+            <span v-else class="ifs-slot__check-spacer" />
           </div>
 
-          <div
-            class="ifs-spool ifs-spool--small"
-            :class="{ 'ifs-spool--empty': !spoolForSlot(slot) }"
-          >
+          <div class="ifs-slot__body">
             <div
-              class="ifs-spool__winding"
-              :style="{ background: spoolGradient(spoolForSlot(slot)) }"
-            />
-            <div class="ifs-spool__hub" />
-            <div class="ifs-spool__hole" />
-          </div>
-
-          <div class="ifs-slot__material">
-            {{ spoolForSlot(slot) ? materialOf(spoolForSlot(slot)) : '—' }}
-          </div>
-        </button>
-      </div>
-
-      <v-divider class="ifs-divider my-3" />
-
-      <div v-if="selectedSpool" class="ifs-detail">
-        <div class="ifs-spool ifs-spool--large">
-          <div
-            class="ifs-spool__winding"
-            :style="{ background: spoolGradient(selectedSpool) }"
-          />
-          <div class="ifs-spool__hub" />
-          <div class="ifs-spool__hole" />
-        </div>
-
-        <div class="ifs-detail__body">
-          <div class="d-flex align-start justify-space-between flex-wrap gap-2">
-            <div class="min-width-0">
-              <div class="text-subtitle-1 font-weight-bold text-truncate">
-                {{ nameOf(selectedSpool) }}
-              </div>
-              <div class="text-caption text--secondary">
-                IFS {{ selectedSlot }} · {{ vendorOf(selectedSpool) }}
-              </div>
+              class="ifs-spool ifs-spool--small"
+              :class="{ 'ifs-spool--empty': !spoolForSlot(slot) }"
+            >
+              <div
+                class="ifs-spool__winding"
+                :style="{ background: spoolGradient(spoolForSlot(slot)) }"
+              />
+              <div class="ifs-spool__hub" />
+              <div class="ifs-spool__hole" />
             </div>
 
-            <div class="d-flex flex-wrap justify-end">
-              <v-chip
-                x-small
-                label
-                outlined
-                class="ms-1 mb-1"
-              >
-                {{ materialOf(selectedSpool) }}
-              </v-chip>
-              <v-chip
-                x-small
-                label
-                outlined
-                class="ms-1 mb-1"
-              >
-                ID {{ selectedSpool.id }}
-              </v-chip>
-              <v-chip
-                v-if="activeSlot === selectedSlot"
-                x-small
-                label
-                outlined
-                color="success"
-                class="ms-1 mb-1"
-              >
-                {{ $t('app.ad5x_ifs.active') }}
-              </v-chip>
+            <div
+              class="ifs-slot__vendor"
+              :title="spoolForSlot(slot) ? vendorOf(spoolForSlot(slot)) : ''"
+            >
+              {{ spoolForSlot(slot) ? vendorOf(spoolForSlot(slot)) : $t('app.ad5x_ifs.unassigned') }}
             </div>
           </div>
 
-          <div class="ifs-progress-label mt-3">
-            <span>{{ $t('app.ad5x_ifs.remaining') }}</span>
-            <strong>{{ weightLabel(selectedSpool) }} · {{ percentage(selectedSpool) }}%</strong>
+          <div v-if="spoolForSlot(slot)" class="ifs-slot__meta">
+            <span class="ifs-slot__pill">ID {{ spoolForSlot(slot).id }}</span>
+            <span class="ifs-slot__pill">{{ materialOf(spoolForSlot(slot)) }}</span>
+            <span class="ifs-slot__stock">{{ compactStock(spoolForSlot(slot)) }}</span>
           </div>
-
-          <div class="ifs-progress mt-1">
-            <div
-              class="ifs-progress__value"
-              :style="{ width: `${percentage(selectedSpool)}%` }"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div v-else class="ifs-detail">
-        <div class="ifs-spool ifs-spool--large ifs-spool--empty">
-          <div class="ifs-spool__winding" />
-          <div class="ifs-spool__hub" />
-          <div class="ifs-spool__hole" />
-        </div>
-
-        <div class="ifs-detail__body">
-          <div class="text-subtitle-2 font-weight-bold">
-            IFS {{ selectedSlot }}
-          </div>
-          <div class="text-caption text--secondary mt-1">
-            {{ $t('app.ad5x_ifs.unassigned') }}
-          </div>
-          <div class="text-caption text--secondary mt-1">
-            {{ $t('app.ad5x_ifs.unassigned_hint') }}
-          </div>
+          <div v-else class="ifs-slot__empty-label">—</div>
         </div>
       </div>
 
@@ -230,7 +159,6 @@ export default Vue.extend({
     return {
       status: null as IfsStatus | null,
       spools: [] as IfsSpool[],
-      selectedSlot: 1,
       lastError: null as string | null,
       refreshTimer: null as number | null
     }
@@ -254,9 +182,6 @@ export default Vue.extend({
       return this.status?.assignments || {}
     },
 
-    selectedSpool (): IfsSpool | null {
-      return this.spoolForSlot(this.selectedSlot)
-    },
 
     assignedCount (): number {
       let count = 0
@@ -309,9 +234,6 @@ export default Vue.extend({
         this.spools = Array.isArray(spools) ? spools : []
         this.lastError = null
 
-        if (this.selectedSlot < 1 || this.selectedSlot > 4) {
-          this.selectedSlot = this.activeSlot
-        }
       } catch (error) {
         this.lastError = error instanceof Error ? error.message : String(error)
       }
@@ -395,6 +317,14 @@ export default Vue.extend({
 
     weightLabel (spool: IfsSpool | null): string {
       return `${Math.round(this.remainingWeight(spool))} g / ${Math.round(this.initialWeight(spool))} g`
+    },
+
+    compactStock (spool: IfsSpool | null): string {
+      const remaining = Math.round(this.remainingWeight(spool))
+      const total = this.initialWeight(spool)
+      return total > 0
+        ? `${remaining} g · ${this.percentage(spool)}%`
+        : `${remaining} g`
     }
   }
 })
@@ -420,18 +350,17 @@ export default Vue.extend({
 .ifs-slot {
   position: relative;
   min-width: 0;
-  padding: 9px 7px 8px;
+  padding: 8px 9px 9px;
   border: 1px solid rgba(127, 127, 127, .25);
   border-radius: 10px;
   background: rgba(127, 127, 127, .055);
   color: inherit;
-  cursor: pointer;
   opacity: .82;
   transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
 }
 
 .ifs-slot:hover {
-  background: rgba(127, 127, 127, .11);
+  background: rgba(127, 127, 127, .09);
   opacity: 1;
 }
 
@@ -443,14 +372,7 @@ export default Vue.extend({
   opacity: .58;
 }
 
-.ifs-slot--selected {
-  border: 2px solid var(--v-primary-base, #2196f3);
-  background: rgba(127, 127, 127, .12);
-  box-shadow: inset 4px 0 0 var(--v-primary-base, #2196f3);
-  opacity: 1;
-}
-
-.ifs-slot--active:not(.ifs-slot--selected) {
+.ifs-slot--active {
   border: 2px solid var(--v-success-base, #4caf50);
   background: rgba(127, 127, 127, .085);
 }
@@ -461,11 +383,11 @@ export default Vue.extend({
 }
 
 .ifs-slot__top {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 18px;
+  gap: 4px;
   min-height: 18px;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 5px;
 }
 
 .ifs-slot__number {
@@ -474,32 +396,80 @@ export default Vue.extend({
   line-height: 1;
 }
 
-.ifs-slot__material {
-  margin-top: 6px;
+.ifs-slot__name {
+  min-width: 0;
   overflow: hidden;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ifs-divider {
-  opacity: .72;
+.ifs-slot__check-spacer {
+  width: 18px;
+  height: 1px;
 }
 
-.ifs-detail {
+.ifs-slot__body {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 7px;
   align-items: center;
-  min-width: 0;
-  padding: 1px 2px;
+  margin: 5px 0 7px;
 }
 
-.ifs-detail__body,
-.min-width-0 {
+.ifs-slot__vendor {
   min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: .82;
+}
+
+.ifs-slot__meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.ifs-slot__pill {
+  flex: 0 0 auto;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 5px;
+  border: 1px solid rgba(127, 127, 127, .22);
+  border-radius: 5px;
+  background: rgba(127, 127, 127, .06);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ifs-slot__stock {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: .88;
+}
+
+.ifs-slot__empty-label {
+  min-height: 16px;
+  font-size: 10px;
+  line-height: 1.3;
+  opacity: .58;
 }
 
 .ifs-spool {
@@ -514,11 +484,6 @@ export default Vue.extend({
   width: 36px;
   height: 36px;
   margin: 0 auto;
-}
-
-.ifs-spool--large {
-  width: 58px;
-  height: 58px;
 }
 
 .ifs-spool__winding {
@@ -547,38 +512,6 @@ export default Vue.extend({
 
 .ifs-spool--empty {
   opacity: .42;
-}
-
-.ifs-progress-label {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 11px;
-}
-
-.ifs-progress-label > span {
-  opacity: .76;
-}
-
-.ifs-progress-label > strong {
-  font-weight: 700;
-}
-
-.ifs-progress {
-  height: 7px;
-  overflow: hidden;
-  border: 1px solid rgba(127, 127, 127, .16);
-  border-radius: 999px;
-  background: rgba(127, 127, 127, .20);
-}
-
-.ifs-progress__value {
-  height: 100%;
-  border-radius: inherit;
-  background: var(--v-primary-base, #2196f3);
-  transition: width .2s ease;
 }
 
 .ifs-footer {
@@ -615,10 +548,6 @@ export default Vue.extend({
 @media (max-width: 600px) {
   .ifs-slots {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .ifs-detail {
-    gap: 10px;
   }
 
   .ifs-meta-pill--wide {

@@ -123,6 +123,14 @@ AD5X_IFS_UPDATE_CHANNEL="$UPDATE_CHANNEL" \
 
 prepare_source_checkout
 
+if [ -f "$SOURCE_DIR/native-fluidd/config.json" ]; then
+    SOURCE_PATCH="$(sed -n 's/.*"patch_revision"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$SOURCE_DIR/native-fluidd/config.json" | head -n 1)"
+    case "$SOURCE_PATCH" in
+        ''|*[!0-9]*) ;;
+        *) NATIVE_PATCH_REVISION="$SOURCE_PATCH" ;;
+    esac
+fi
+
 # Exact current Z-Mod contract: plugins.sh pulls the Git repository, validates
 # <plugin>/<plugin>.cfg, calls install.sh and requests Klipper restart.
 "$PLUGINS_SCRIPT" "$PLUGIN_NAME" Enable
