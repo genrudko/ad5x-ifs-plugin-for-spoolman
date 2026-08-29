@@ -43,3 +43,24 @@ The extractor:
 This is only the parser/cache proof. Native upload/list/print support still
 belongs in the Moonraker/Fluidd side; IFS consumption of the material metadata
 must remain optional.
+
+## Direct-print artifact lifecycle
+
+For `Send & Print`, the source container and the executable job now have
+different roles:
+
+- the extracted plate is exposed as a normal human-readable `.gcode` beside the
+  upload, so Moonraker/Fluidd can attach metadata, thumbnails and statistics;
+- Moonraker metadata parsing is awaited before the canonical G-code is started;
+- only after a successful start, the original `.gcode.3mf` is moved into
+  `.zmod/gcode_3mf/source/<content-id>/` as provenance;
+- if a friendly G-code name already contains different content, the existing
+  file is preserved and the new slice receives a short content suffix;
+- dry-run, preparation failure, IFS block, or print-start failure leave the
+  source 3MF in place.
+
+Regression check:
+
+```sh
+python3 test_visible_jobs.py
+```
