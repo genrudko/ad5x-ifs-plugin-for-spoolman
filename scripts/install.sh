@@ -40,8 +40,6 @@ uninstall_fluidd_card.sh
 install_fluidd_native.sh
 restore_fluidd_native.sh
 power_on_hook.sh
-recover_assignments.sh
-recover_assignments.py
 boot_start.sh
 start.sh
 stop.sh
@@ -76,7 +74,7 @@ if [ "$SOURCE_DIR" != "$TARGET_DIR" ]; then
     done
 fi
 
-"$TARGET_DIR/recover_assignments.sh"
+"$TARGET_DIR/update.sh" --recover-only
 
 chmod +x "$TARGET_DIR"/*.sh
 "$TARGET_DIR/power_on_hook.sh" install

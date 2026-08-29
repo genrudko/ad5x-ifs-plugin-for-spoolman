@@ -13,8 +13,6 @@ uninstall_fluidd_card.sh
 install_fluidd_native.sh
 restore_fluidd_native.sh
 power_on_hook.sh
-recover_assignments.sh
-recover_assignments.py
 boot_start.sh
 start.sh
 stop.sh

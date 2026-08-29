@@ -21,7 +21,7 @@ case "${1:-}" in
 esac
 
 PLUGIN_FILES="ifs_spoolman.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
-SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh install_fluidd_native.sh restore_fluidd_native.sh power_on_hook.sh recover_assignments.sh recover_assignments.py"
+SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh install_fluidd_native.sh restore_fluidd_native.sh power_on_hook.sh"
 
 for FILE in $PLUGIN_FILES; do
     [ -f "$REPO_DIR/plugin/$FILE" ] || {
@@ -74,7 +74,7 @@ for FILE in config assignments; do
     fi
 done
 
-"$TARGET_DIR/recover_assignments.sh"
+"$REPO_DIR/scripts/update.sh" --recover-only
 
 chmod +x "$TARGET_DIR"/*.sh
 "$TARGET_DIR/power_on_hook.sh" install
