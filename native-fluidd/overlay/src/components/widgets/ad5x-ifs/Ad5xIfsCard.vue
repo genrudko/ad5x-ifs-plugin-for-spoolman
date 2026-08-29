@@ -111,6 +111,22 @@
         </button>
       </div>
 
+      <div v-if="focusedSpool" class="ifs-summary mt-3">
+        <div class="ifs-summary__label">
+          <span>IFS {{ focusedSlot }} · {{ nameOf(focusedSpool) }}</span>
+          <strong>{{ weightLabel(focusedSpool) }} · {{ percentage(focusedSpool) }}%</strong>
+        </div>
+        <div class="ifs-summary__progress">
+          <div
+            class="ifs-summary__progress-value"
+            :style="{
+              width: `${percentage(focusedSpool)}%`,
+              background: spoolGradient(focusedSpool)
+            }"
+          />
+        </div>
+      </div>
+
       <div class="ifs-footer mt-4">
         <span class="ifs-meta-pill ifs-meta-pill--primary">
           {{ $t('app.ad5x_ifs.active_slot') }}: IFS {{ activeSlot }}
@@ -196,6 +212,13 @@ export default Vue.extend({
       return this.status?.assignments || {}
     },
 
+    focusedSlot (): number {
+      return this.selectedSlot != null ? this.selectedSlot : this.activeSlot
+    },
+
+    focusedSpool (): IfsSpool | null {
+      return this.spoolForSlot(this.focusedSlot)
+    },
 
     assignedCount (): number {
       let count = 0
@@ -513,6 +536,49 @@ export default Vue.extend({
 }
 
 .ifs-slot__progress-value {
+  height: 100%;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .18);
+  transition: width .2s ease;
+}
+
+.ifs-summary {
+  min-width: 0;
+}
+
+.ifs-summary__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ifs-summary__label > span {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ifs-summary__label > strong {
+  flex: 0 0 auto;
+  font-weight: 800;
+}
+
+.ifs-summary__progress {
+  height: 8px;
+  margin-top: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(127, 127, 127, .18);
+  border-radius: 999px;
+  background: rgba(127, 127, 127, .20);
+}
+
+.ifs-summary__progress-value {
   height: 100%;
   border-radius: inherit;
   box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .18);
