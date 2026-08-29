@@ -3,6 +3,7 @@
 ## 0.6.6-beta — 2026-08-28
 ### Hotfix — 2026-08-29
 
+- Added IFS↔Spoolman assignment interoperability through Moonraker `lane_data`: HelixScreen assignments are imported automatically, while plugin edits update only the lane `spool_id` without clobbering Helix material/color/vendor metadata. A durable sync snapshot resolves later two-way edits without wiping legacy local assignments on first bridge startup.
 - Added automatic recovery of previous IFS↔Spoolman assignments from pre-git/update backups during migration when the current `assignments.json` is empty; non-empty current assignments are never overwritten.
 - Fixed stale UI/server version identity by deriving runtime surfaces from the installed package version.
 - Spoolman connectivity is now probed independently of IFS slot assignment, so a fresh `0/4` assignment state no longer reports a false offline status.

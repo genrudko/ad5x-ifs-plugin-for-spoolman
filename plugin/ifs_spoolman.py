@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 import os
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,6 +31,8 @@ APP_DIR = first_existing([
     "/opt/config/mod_data/ifs_spoolman",
 ])
 ASSIGNMENTS_FILE = os.path.join(APP_DIR, "assignments.json")
+LANE_SYNC_STATE_FILE = os.path.join(APP_DIR, "lane_data_sync.json")
+LANE_DATA_NAMESPACE = "lane_data"
 FF_CONFIG = first_existing([
     "/usr/prog/config/Adventurer5M.json",
     "/root/printer_data/config/Adventurer5M.json",
@@ -312,6 +315,7 @@ FLUIDD_INTEGRATION = CONFIG["fluidd_integration"]
 
 
 lock = threading.RLock()
+lane_sync_lock = threading.Lock()
 state = {
     "active_slot": None,
     "moonraker_spool_id": None,
@@ -2290,6 +2294,383 @@ def http_json(url, method="GET", payload=None, timeout=HTTP_TIMEOUT):
 
 
 
+def normalize_spool_id(value):
+    if value in (None, "", 0, "0"):
+        return None
+    if isinstance(value, bool):
+        raise ValueError("Spoolman ID must be a positive integer")
+    try:
+        value = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid Spoolman ID: {value!r}") from exc
+    if value <= 0:
+        return None
+    return value
+
+
+def empty_assignment_map():
+    return {str(slot): None for slot in range(1, SLOT_COUNT + 1)}
+
+
+def normalize_assignment_map(raw):
+    if not isinstance(raw, dict):
+        raise ValueError("assignment map must be an object")
+    result = empty_assignment_map()
+    seen = set()
+    for slot in range(1, SLOT_COUNT + 1):
+        spool_id = normalize_spool_id(raw.get(str(slot)))
+        if spool_id is not None:
+            if spool_id in seen:
+                raise ValueError(f"duplicate Spoolman ID {spool_id}")
+            seen.add(spool_id)
+        result[str(slot)] = spool_id
+    return result
+
+
+def load_lane_sync_state():
+    try:
+        with open(LANE_SYNC_STATE_FILE, "r", encoding="utf-8") as stream:
+            raw = json.load(stream)
+        if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+            return None
+        return normalize_assignment_map(raw.get("assignments", {}))
+    except FileNotFoundError:
+        return None
+    except Exception:
+        # A corrupt bridge snapshot is not authoritative.  The first
+        # reconciliation rule is deliberately non-destructive and can rebuild it.
+        return None
+
+
+def save_lane_sync_state(values):
+    atomic_write_json(
+        LANE_SYNC_STATE_FILE,
+        {
+            "schema_version": 1,
+            "assignments": normalize_assignment_map(values),
+            "updated_at": timestamp_now(),
+        },
+    )
+
+
+def read_lane_data_namespace():
+    query = urllib.parse.urlencode({"namespace": LANE_DATA_NAMESPACE})
+    try:
+        payload = http_json(
+            MOONRAKER + "/server/database/item?" + query,
+            timeout=HTTP_TIMEOUT,
+        )
+    except urllib.error.HTTPError as exc:
+        # An absent namespace is a normal first-run state.  It is still a
+        # successful Moonraker round-trip, so local assignments may seed it.
+        if exc.code == 404:
+            return {}
+        raise
+
+    result = payload.get("result", {})
+    if not isinstance(result, dict):
+        raise RuntimeError("Moonraker returned invalid database response")
+    value = result.get("value", {})
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise RuntimeError("Moonraker lane_data namespace is not an object")
+    return value
+
+
+def extract_lane_assignments(namespace_doc):
+    if not isinstance(namespace_doc, dict):
+        raise ValueError("lane_data namespace must be an object")
+    result = empty_assignment_map()
+    present = {str(slot): False for slot in range(1, SLOT_COUNT + 1)}
+
+    for slot in range(1, SLOT_COUNT + 1):
+        slot_key = str(slot)
+        record = namespace_doc.get(f"lane{slot}")
+        if not isinstance(record, dict):
+            continue
+        inner_lane = record.get("lane")
+        if inner_lane is not None and str(inner_lane) != str(slot - 1):
+            # Never consume a key/inner-lane mismatch from this shared namespace.
+            continue
+        present[slot_key] = True
+        result[slot_key] = normalize_spool_id(record.get("spool_id"))
+
+    # A duplicate physical spool mapping is invalid for our IFS model.  Refuse
+    # the whole remote snapshot rather than silently moving one of the slots.
+    positive = [value for value in result.values() if value is not None]
+    if len(positive) != len(set(positive)):
+        raise ValueError("lane_data contains duplicate Spoolman assignments")
+    return result, present
+
+
+def lane_record_with_assignment(namespace_doc, slot, spool_id):
+    key = f"lane{slot}"
+    original = namespace_doc.get(key)
+    if not isinstance(original, dict):
+        if spool_id is None:
+            return key, None, False
+        record = {"lane": str(slot - 1), "spool_id": int(spool_id)}
+        return key, record, True
+
+    record = dict(original)
+    if spool_id is None:
+        if "spool_id" not in record:
+            return key, record, False
+        record.pop("spool_id", None)
+    else:
+        record["lane"] = str(slot - 1)
+        record["spool_id"] = int(spool_id)
+    return key, record, record != original
+
+
+def post_lane_record(key, record):
+    payload = {
+        "namespace": LANE_DATA_NAMESPACE,
+        "key": key,
+        "value": record,
+    }
+    result = http_json(
+        MOONRAKER + "/server/database/item",
+        method="POST",
+        payload=payload,
+        timeout=HTTP_TIMEOUT,
+    ).get("result", {})
+    if not isinstance(result, dict):
+        raise RuntimeError("Moonraker rejected lane_data update")
+    return result
+
+
+def plan_lane_assignment_sync(local_values, remote_values, remote_present, previous_values):
+    local = normalize_assignment_map(local_values)
+    remote = normalize_assignment_map(remote_values)
+    previous = (
+        None
+        if previous_values is None
+        else normalize_assignment_map(previous_values)
+    )
+    target = empty_assignment_map()
+    remote_writes = {}
+    sources = {}
+
+    for slot in range(1, SLOT_COUNT + 1):
+        key = str(slot)
+        local_id = local[key]
+        remote_id = remote[key]
+        has_remote = bool(remote_present.get(key))
+
+        if previous is None:
+            # First bridge startup: never destroy an old standalone assignment
+            # merely because Helix has not written this lane yet.  A positive
+            # shared lane_data assignment, however, is explicit and wins.
+            if has_remote and remote_id is not None:
+                chosen = remote_id
+                sources[key] = "lane_data"
+            elif local_id is not None:
+                chosen = local_id
+                sources[key] = "plugin"
+                if not has_remote or remote_id != local_id:
+                    remote_writes[key] = chosen
+            else:
+                chosen = None
+                sources[key] = "empty"
+            target[key] = chosen
+            continue
+
+        prior_id = previous[key]
+        local_changed = local_id != prior_id
+        remote_changed = has_remote and remote_id != prior_id
+
+        if local_changed and not remote_changed:
+            chosen = local_id
+            sources[key] = "plugin"
+            if not has_remote or remote_id != chosen:
+                remote_writes[key] = chosen
+        elif remote_changed and not local_changed:
+            chosen = remote_id
+            sources[key] = "lane_data"
+        elif local_changed and remote_changed:
+            if local_id == remote_id:
+                chosen = local_id
+                sources[key] = "converged"
+            else:
+                # Genuine simultaneous edit.  lane_data is the ecosystem-wide
+                # interop surface (Helix/Orca/Mainsail), so prefer it and log the
+                # conflict in the caller instead of oscillating forever.
+                chosen = remote_id
+                sources[key] = "lane_data_conflict"
+        else:
+            chosen = local_id
+            sources[key] = "unchanged"
+
+        target[key] = chosen
+
+    positive = [value for value in target.values() if value is not None]
+    if len(positive) != len(set(positive)):
+        raise ValueError("reconciled assignments would contain duplicate spool IDs")
+    return target, remote_writes, sources
+
+
+def mirror_assignment_to_lane_data(slot, spool_id):
+    try:
+        with lane_sync_lock:
+            namespace_doc = read_lane_data_namespace()
+            key, record, changed = lane_record_with_assignment(
+                namespace_doc, slot, spool_id
+            )
+            if changed:
+                post_lane_record(key, record)
+
+            previous = load_lane_sync_state() or empty_assignment_map()
+            previous[str(slot)] = normalize_spool_id(spool_id)
+            save_lane_sync_state(previous)
+
+        set_state(
+            lane_data_connected=True,
+            lane_data_error=None,
+            lane_data_last_sync=timestamp_now(),
+            lane_data_sync_result="mirrored",
+        )
+        event_log(
+            "info",
+            "lane_data_assignment_mirrored",
+            "Назначение IFS сохранено в Moonraker lane_data",
+            slot=slot,
+            spool_id=spool_id,
+            changed=changed,
+        )
+        return True
+    except Exception as exc:
+        set_state(
+            lane_data_connected=False,
+            lane_data_error=str(exc),
+            lane_data_sync_result="mirror_failed",
+        )
+        event_log(
+            "warning",
+            "lane_data_assignment_mirror_failed",
+            "Не удалось сохранить назначение IFS в Moonraker lane_data",
+            slot=slot,
+            spool_id=spool_id,
+            error=str(exc),
+        )
+        return False
+
+
+def reconcile_lane_assignments():
+    imported_slots = []
+    try:
+        with lane_sync_lock:
+            namespace_doc = read_lane_data_namespace()
+            remote, present = extract_lane_assignments(namespace_doc)
+            previous = load_lane_sync_state()
+            with lock:
+                local_before = normalize_assignment_map(assignments)
+
+            target, remote_writes, sources = plan_lane_assignment_sync(
+                local_before, remote, present, previous
+            )
+
+            with lock:
+                # Do not apply a stale network result over a user click that
+                # landed while the Moonraker request was in flight.
+                if normalize_assignment_map(assignments) != local_before:
+                    set_state(lane_data_sync_result="deferred_local_change")
+                    return False
+                if target != local_before:
+                    assignments.clear()
+                    assignments.update(target)
+                    atomic_write_json(ASSIGNMENTS_FILE, assignments)
+                    imported_slots = [
+                        int(slot)
+                        for slot in target
+                        if target[slot] != local_before[slot]
+                    ]
+
+            for slot_key, spool_id in remote_writes.items():
+                slot = int(slot_key)
+                key, record, changed = lane_record_with_assignment(
+                    namespace_doc, slot, spool_id
+                )
+                if changed:
+                    post_lane_record(key, record)
+                    if record is not None:
+                        namespace_doc[key] = record
+
+            save_lane_sync_state(target)
+
+        set_state(
+            lane_data_connected=True,
+            lane_data_error=None,
+            lane_data_last_sync=timestamp_now(),
+            lane_data_sync_result=(
+                "changed" if imported_slots or remote_writes else "in_sync"
+            ),
+        )
+
+        for slot in imported_slots:
+            event_log(
+                "info",
+                "lane_data_assignment_imported",
+                "Назначение IFS импортировано из Moonraker lane_data",
+                slot=slot,
+                spool_id=target[str(slot)],
+                source=sources[str(slot)],
+            )
+        for slot_key, spool_id in remote_writes.items():
+            event_log(
+                "info",
+                "lane_data_assignment_exported",
+                "Назначение IFS экспортировано в Moonraker lane_data",
+                slot=int(slot_key),
+                spool_id=spool_id,
+                source=sources[slot_key],
+            )
+        for slot_key, source in sources.items():
+            if source == "lane_data_conflict":
+                event_log(
+                    "warning",
+                    "lane_data_assignment_conflict",
+                    "Одновременно изменено назначение IFS в плагине и lane_data; выбран lane_data",
+                    slot=int(slot_key),
+                    spool_id=target[slot_key],
+                )
+
+        # If Helix changed the currently active physical slot's mapping, apply
+        # the newly agreed spool to Moonraker/Spoolman immediately as well.
+        active_slot = state_snapshot().get("active_slot")
+        if active_slot in imported_slots and target.get(str(active_slot)) is not None:
+            try:
+                synchronize(
+                    force=True,
+                    slot=active_slot,
+                    reason="lane_data_assignment_change",
+                )
+            except Exception as exc:
+                event_log(
+                    "warning",
+                    "lane_data_active_sync_failed",
+                    "Назначение из lane_data сохранено, но active spool не переключён",
+                    slot=active_slot,
+                    spool_id=target.get(str(active_slot)),
+                    error=str(exc),
+                )
+        return True
+    except Exception as exc:
+        set_state(
+            lane_data_connected=False,
+            lane_data_error=str(exc),
+            lane_data_sync_result="failed",
+        )
+        event_log(
+            "warning",
+            "lane_data_reconcile_failed",
+            "Не удалось согласовать назначения IFS с Moonraker lane_data",
+            error=str(exc),
+        )
+        return False
+
+
 # AD5X_IFS_DIAGNOSTICS_V0_5
 
 EVENT_LOG_FILE = os.path.join(APP_DIR, "events.log")
@@ -2454,6 +2835,12 @@ def build_health():
             "spoolman": {
                 "ok": spoolman_ok,
                 "connected": spoolman_ok,
+            },
+            "lane_data": {
+                "ok": snapshot.get("lane_data_connected") is True,
+                "last_sync": snapshot.get("lane_data_last_sync"),
+                "last_result": snapshot.get("lane_data_sync_result"),
+                "error": snapshot.get("lane_data_error"),
             },
         },
         "synchronization": {
@@ -2649,6 +3036,10 @@ def probe_spoolman_status():
         spoolman_connected=connected,
         moonraker_spool_id=current,
         spoolman_probe_error=None,
+        lane_data_connected=False,
+        lane_data_error=None,
+        lane_data_last_sync=None,
+        lane_data_sync_result="waiting",
     )
     return connected, current
 
@@ -2951,7 +3342,9 @@ def monitor():
     )
 
     health_probe_interval = max(2.0, min(10.0, POLL_INTERVAL * 5.0))
+    lane_sync_interval = max(2.0, min(5.0, POLL_INTERVAL * 3.0))
     last_health_probe = 0.0
+    last_lane_sync = 0.0
 
     while True:
         try:
@@ -2959,6 +3352,9 @@ def monitor():
             if now_monotonic - last_health_probe >= health_probe_interval:
                 refresh_spoolman_health()
                 last_health_probe = now_monotonic
+            if now_monotonic - last_lane_sync >= lane_sync_interval:
+                reconcile_lane_assignments()
+                last_lane_sync = now_monotonic
 
             raw_slot = read_active_slot()
             now_text = timestamp_now()
@@ -3200,8 +3596,9 @@ class Handler(BaseHTTPRequestHandler):
                         for other_slot,other_id in assignments.items():
                             if other_slot != str(slot) and other_id == spool_id: raise ValueError(f"Катушка ID {spool_id} уже назначена слоту IFS {other_slot}")
                     assignments[str(slot)]=spool_id; atomic_write_json(ASSIGNMENTS_FILE,assignments)
+                mirrored = mirror_assignment_to_lane_data(slot, spool_id)
                 if state.get("active_slot")==slot: synchronize(True)
-                self.send_json(200,{"ok":True}); return
+                self.send_json(200,{"ok":True,"lane_data_mirrored":mirrored}); return
             if self.path=="/api/sync": synchronize(True); self.send_json(200,{"ok":True}); return
             self.send_json(404,{"error":"Not found"})
         except Exception as exc: self.send_json(400,{"error":str(exc)})
