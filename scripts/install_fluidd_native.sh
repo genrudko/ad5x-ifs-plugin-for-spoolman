@@ -4,6 +4,7 @@ set -eu
 APP_NAME="AD5X IFS Plugin for Spoolman"
 PATCH_REVISION="${AD5X_IFS_FLUIDD_PATCH_REVISION:-4}"
 SOURCE_CONFIG="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman/native-fluidd/config.json"
+SOURCE_REPO="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman"
 if [ -z "${AD5X_IFS_FLUIDD_PATCH_REVISION+x}" ] && [ -f "$SOURCE_CONFIG" ]; then
     SOURCE_PATCH="$(sed -n 's/.*"patch_revision"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$SOURCE_CONFIG" | head -n 1)"
     case "$SOURCE_PATCH" in
@@ -110,7 +111,7 @@ clean_legacy_dir() {
 
 [ "$(id -u)" = "0" ] || fail "run this script over SSH as root"
 
-for CMD in wget sha256sum unzip grep mv rm mkdir cat awk cp; do
+for CMD in sha256sum unzip grep mv rm mkdir cat awk cp; do
     command -v "$CMD" >/dev/null 2>&1 || fail "required host command not found: $CMD"
 done
 
@@ -167,13 +168,41 @@ mkdir -p "$WORK_DIR" "$NEW_DIR"
 
 echo "Fluidd upstream: $UPSTREAM_TAG"
 echo "Native IFS UI patch: $PATCH_REVISION"
-echo "Transport: raw.githubusercontent.com"
 echo "Downloading native Fluidd compatibility build..."
 
-wget -qO "$ZIP_FILE" "$RAW_BASE/fluidd.zip?cb=$CACHE_BUSTER" \
-    || fail "raw compatibility build is not published yet or cannot be downloaded"
-wget -qO "$SHA_FILE" "$RAW_BASE/fluidd.zip.sha256?cb=$CACHE_BUSTER" \
-    || fail "raw compatibility checksum is unavailable"
+download_from_git() {
+    [ -d "$SOURCE_REPO" ] || return 1
+
+    if command -v git >/dev/null 2>&1; then
+        echo "Transport: git / existing plugin checkout"
+        git -C "$SOURCE_REPO" fetch -q --depth=1 origin "$RAW_BRANCH" || return 1
+        git -C "$SOURCE_REPO" show "FETCH_HEAD:${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}/fluidd.zip" >"$ZIP_FILE" || return 1
+        git -C "$SOURCE_REPO" show "FETCH_HEAD:${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}/fluidd.zip.sha256" >"$SHA_FILE" || return 1
+        return 0
+    fi
+
+    if chroot "$ROOT" /bin/sh -c 'command -v git >/dev/null 2>&1'; then
+        echo "Transport: git / Moonraker chroot"
+        chroot "$ROOT" git -C "$SOURCE_REPO" fetch -q --depth=1 origin "$RAW_BRANCH" || return 1
+        chroot "$ROOT" git -C "$SOURCE_REPO" show "FETCH_HEAD:${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}/fluidd.zip" >"$ZIP_FILE" || return 1
+        chroot "$ROOT" git -C "$SOURCE_REPO" show "FETCH_HEAD:${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}/fluidd.zip.sha256" >"$SHA_FILE" || return 1
+        return 0
+    fi
+
+    return 1
+}
+
+download_from_raw() {
+    command -v wget >/dev/null 2>&1 || return 1
+    echo "Transport: raw.githubusercontent.com"
+    wget -qO "$ZIP_FILE" "$RAW_BASE/fluidd.zip?cb=$CACHE_BUSTER" || return 1
+    wget -qO "$SHA_FILE" "$RAW_BASE/fluidd.zip.sha256?cb=$CACHE_BUSTER" || return 1
+}
+
+if ! download_from_git; then
+    rm -f "$ZIP_FILE" "$SHA_FILE"
+    download_from_raw || fail "compatibility build cannot be fetched via git or raw.githubusercontent.com"
+fi
 
 EXPECTED_SHA="$(awk '{print $1; exit}' "$SHA_FILE")"
 [ -n "$EXPECTED_SHA" ] || fail "empty checksum file"
