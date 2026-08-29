@@ -38,6 +38,8 @@ uninstall_fluidd_card.sh
 install_fluidd_native.sh
 restore_fluidd_native.sh
 power_on_hook.sh
+recover_assignments.sh
+recover_assignments.py
 boot_start.sh
 start.sh
 stop.sh
@@ -80,6 +82,8 @@ prune_backups() {
         fi
     done
 }
+
+"$SOURCE_DIR/recover_assignments.sh"
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"

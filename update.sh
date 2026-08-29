@@ -24,7 +24,7 @@ case "${1:-}" in
 esac
 
 PLUGIN_FILES="ifs_spoolman.py ui_v0_2.html ifs-spoolman-card.js ifs-spoolman-layout.js ifs-spoolman-dashboard.js ifs-spoolman-visibility.js ifs-spoolman-selection.js"
-SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh install_fluidd_native.sh restore_fluidd_native.sh power_on_hook.sh"
+SCRIPT_FILES="boot_start.sh start.sh stop.sh status.sh update.sh uninstall.sh install_fluidd_card.sh uninstall_fluidd_card.sh install_fluidd_native.sh restore_fluidd_native.sh power_on_hook.sh recover_assignments.sh recover_assignments.py"
 TRACKED_FILES="$PLUGIN_FILES $SCRIPT_FILES install.sh VERSION PACKAGE_MANIFEST.txt config.json assignments.json"
 
 for FILE in $PLUGIN_FILES; do
@@ -83,6 +83,8 @@ prune_backups() {
         fi
     done
 }
+
+"$REPO_DIR/scripts/recover_assignments.sh"
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"
