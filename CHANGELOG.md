@@ -1,6 +1,12 @@
 # Changelog
 
 ## 0.6.6-beta — 2026-08-28
+### Hotfix — 2026-08-29
+
+- Fixed stale UI/server version identity by deriving runtime surfaces from the installed package version.
+- Spoolman connectivity is now probed independently of IFS slot assignment, so a fresh `0/4` assignment state no longer reports a false offline status.
+- Synchronization and health monitoring share one Moonraker Spoolman status parser; health polling remains low-load and assignment-independent.
+
 
 ### Added
 

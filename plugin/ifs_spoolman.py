@@ -36,6 +36,14 @@ FF_CONFIG = first_existing([
 ])
 # IFS_SPOOLMAN_CONFIG_V0_3
 APP_VERSION = "0.5.1-beta"
+PACKAGE_VERSION_FILE = os.path.join(APP_DIR, "VERSION")
+try:
+    with open(PACKAGE_VERSION_FILE, "r", encoding="utf-8") as stream:
+        installed_version = stream.read().strip()
+    if installed_version:
+        APP_VERSION = installed_version
+except OSError:
+    pass
 CONFIG_SCHEMA_VERSION = 1
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
 
@@ -1295,7 +1303,7 @@ h1 {
           Привязка физических каналов IFS к катушкам Spoolman
           и автоматическая синхронизация активного филамента.
         </div>
-        <div class="version-badge">v0.5.1 beta</div>
+        <div class="version-badge">v__APP_VERSION__</div>
       </div>
     </div>
 
@@ -1401,7 +1409,7 @@ h1 {
 
       <div class="diag-item">
         <span>Версия интерфейса</span>
-        <span>0.5.1 beta</span>
+        <span>__APP_VERSION__</span>
       </div>
     </div>
   </details>
@@ -2258,6 +2266,8 @@ setInterval(() => {
 </html>
 '''
 
+HTML = HTML.replace("__APP_VERSION__", APP_VERSION)
+
 def load_assignments():
     global assignments
     try:
@@ -2602,6 +2612,81 @@ def read_active_slot():
 def get_moonraker_status():
     return http_json(MOONRAKER + "/server/spoolman/status").get("result", {})
 
+
+def normalize_moonraker_spoolman_status(moonraker):
+    if not isinstance(moonraker, dict):
+        raise RuntimeError("Moonraker returned invalid Spoolman status")
+
+    connected = bool(moonraker.get("spoolman_connected"))
+    current = moonraker.get("spool_id")
+
+    if current is not None:
+        try:
+            current = int(current)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Moonraker returned invalid spool ID: {current!r}"
+            ) from exc
+
+    return connected, current
+
+
+def probe_spoolman_status():
+    try:
+        connected, current = normalize_moonraker_spoolman_status(
+            get_moonraker_status()
+        )
+    except Exception as exc:
+        set_state(
+            moonraker_status_ok=False,
+            spoolman_connected=False,
+            spoolman_probe_error=str(exc),
+        )
+        raise
+
+    set_state(
+        moonraker_status_ok=True,
+        spoolman_connected=connected,
+        moonraker_spool_id=current,
+        spoolman_probe_error=None,
+    )
+    return connected, current
+
+
+def refresh_spoolman_health():
+    previous = state_snapshot()
+
+    try:
+        connected, current = probe_spoolman_status()
+    except Exception as exc:
+        if (
+            previous.get("moonraker_status_ok") is not False
+            or previous.get("spoolman_probe_error") != str(exc)
+        ):
+            event_log(
+                "warning",
+                "spoolman_health_probe_failed",
+                "Не удалось проверить состояние Spoolman через Moonraker",
+                error=str(exc),
+            )
+        return False
+
+    if previous.get("spoolman_connected") != connected:
+        event_log(
+            "info" if connected else "warning",
+            "spoolman_connection_changed",
+            (
+                "Связь со Spoolman установлена"
+                if connected
+                else "Moonraker сообщает об отсутствии связи со Spoolman"
+            ),
+            connected=connected,
+            spool_id=current,
+        )
+
+    return connected
+
+
 def set_active_spool(spool_id):
     return http_json(MOONRAKER + "/server/spoolman/spool_id", method="POST", payload={"spool_id": spool_id}).get("result", {}).get("spool_id")
 
@@ -2697,22 +2782,7 @@ def synchronize(
         )
 
         try:
-            moonraker = get_moonraker_status()
-
-            connected = bool(
-                moonraker.get("spoolman_connected")
-            )
-
-            current = moonraker.get("spool_id")
-
-            if current is not None:
-                current = int(current)
-
-            set_state(
-                moonraker_status_ok=True,
-                spoolman_connected=connected,
-                moonraker_spool_id=current,
-            )
+            connected, current = probe_spoolman_status()
 
             if not connected:
                 raise RuntimeError(
@@ -2866,6 +2936,7 @@ def monitor():
         invalid_sensor_reads=0,
         cooldown_remaining=0.0,
         last_sensor_read_monotonic=None,
+        spoolman_probe_error=None,
     )
 
     event_log(
@@ -2879,10 +2950,17 @@ def monitor():
         ),
     )
 
+    health_probe_interval = max(2.0, min(10.0, POLL_INTERVAL * 5.0))
+    last_health_probe = 0.0
+
     while True:
         try:
-            raw_slot = read_active_slot()
             now_monotonic = time.monotonic()
+            if now_monotonic - last_health_probe >= health_probe_interval:
+                refresh_spoolman_health()
+                last_health_probe = now_monotonic
+
+            raw_slot = read_active_slot()
             now_text = timestamp_now()
 
             _diagnostics_runtime[
@@ -3129,6 +3207,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc: self.send_json(400,{"error":str(exc)})
 
 
+
+Handler.server_version = f"IFS-Spoolman/{APP_VERSION}"
 
 def main():
     os.makedirs(APP_DIR, exist_ok=True)
