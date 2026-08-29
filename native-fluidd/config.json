@@ -1,6 +1,6 @@
 {
   "upstream_repository": "ghzserg/fluidd",
-  "patch_revision": 5,
+  "patch_revision": 6,
   "distribution_release_tag": "fluidd-compatibility",
   "asset_template": "fluidd-{upstream_tag}-ifs-ui-v{patch_revision}.zip",
   "legacy_compatibility": {

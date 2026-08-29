@@ -40,15 +40,18 @@
       </v-alert>
 
       <div class="ifs-slots">
-        <div
+        <button
           v-for="slot in 4"
           :key="`ifs-slot-${slot}`"
+          type="button"
           class="ifs-slot"
           :class="{
+            'ifs-slot--selected': selectedSlot === slot,
             'ifs-slot--active': activeSlot === slot,
             'ifs-slot--assigned': Boolean(spoolForSlot(slot)),
             'ifs-slot--empty': !spoolForSlot(slot)
           }"
+          @click="selectedSlot = slot"
         >
           <div class="ifs-slot__top">
             <span class="ifs-slot__number">{{ slot }}</span>
@@ -95,7 +98,17 @@
             <span class="ifs-slot__stock">{{ compactStock(spoolForSlot(slot)) }}</span>
           </div>
           <div v-else class="ifs-slot__empty-label">—</div>
-        </div>
+
+          <div v-if="spoolForSlot(slot)" class="ifs-slot__progress">
+            <div
+              class="ifs-slot__progress-value"
+              :style="{
+                width: `${percentage(spoolForSlot(slot))}%`,
+                background: spoolGradient(spoolForSlot(slot))
+              }"
+            />
+          </div>
+        </button>
       </div>
 
       <div class="ifs-footer mt-4">
@@ -159,6 +172,7 @@ export default Vue.extend({
     return {
       status: null as IfsStatus | null,
       spools: [] as IfsSpool[],
+      selectedSlot: null as number | null,
       lastError: null as string | null,
       refreshTimer: null as number | null
     }
@@ -359,7 +373,12 @@ export default Vue.extend({
   border: 1px solid rgba(127, 127, 127, .25);
   border-radius: 10px;
   background: rgba(127, 127, 127, .055);
+  width: 100%;
+  appearance: none;
   color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   opacity: .82;
   transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
 }
@@ -377,7 +396,14 @@ export default Vue.extend({
   opacity: .58;
 }
 
-.ifs-slot--active {
+.ifs-slot--selected {
+  border: 2px solid var(--v-primary-base, #2196f3);
+  background: rgba(127, 127, 127, .12);
+  box-shadow: inset 4px 0 0 var(--v-primary-base, #2196f3);
+  opacity: 1;
+}
+
+.ifs-slot--active:not(.ifs-slot--selected) {
   border: 2px solid var(--v-success-base, #4caf50);
   background: rgba(127, 127, 127, .085);
 }
@@ -475,6 +501,22 @@ export default Vue.extend({
   font-size: 10px;
   line-height: 1.3;
   opacity: .58;
+}
+
+.ifs-slot__progress {
+  height: 5px;
+  margin-top: 7px;
+  overflow: hidden;
+  border: 1px solid rgba(127, 127, 127, .18);
+  border-radius: 999px;
+  background: rgba(127, 127, 127, .20);
+}
+
+.ifs-slot__progress-value {
+  height: 100%;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .18);
+  transition: width .2s ease;
 }
 
 .ifs-spool {
