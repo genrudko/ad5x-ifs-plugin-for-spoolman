@@ -6,26 +6,59 @@
     layout-path="dashboard.ad5x-ifs-card"
     card-classes="ad5x-ifs-card"
   >
-    <template #menu>
-      <v-chip
-        small
-        label
-        outlined
-        class="me-2 my-1"
-        :color="connected ? 'success' : 'warning'"
-      >
-        {{ connected ? $t('app.ad5x_ifs.connected') : $t('app.ad5x_ifs.disconnected') }}
-      </v-chip>
+    <template #title>
+      <div class="ifs-card-title">
+        <div class="ifs-card-title__main">
+          <v-icon left>
+            $filament
+          </v-icon>
+          <span class="font-weight-light ifs-card-title__text">
+            {{ $t('app.ad5x_ifs.title') }}
+          </span>
+        </div>
 
-      <app-btn
-        small
-        outlined
-        color="primary"
-        class="me-1 my-1"
-        @click="openManager"
-      >
-        {{ $t('app.ad5x_ifs.manage') }}
-      </app-btn>
+        <div class="ifs-header-actions ifs-header-actions--mobile">
+          <v-chip
+            x-small
+            label
+            outlined
+            :color="connected ? 'success' : 'warning'"
+          >
+            {{ connected ? $t('app.ad5x_ifs.connected') : $t('app.ad5x_ifs.disconnected') }}
+          </v-chip>
+
+          <app-btn
+            x-small
+            outlined
+            color="primary"
+            @click.stop="openManager"
+          >
+            {{ $t('app.ad5x_ifs.manage') }}
+          </app-btn>
+        </div>
+      </div>
+    </template>
+
+    <template #menu>
+      <div class="ifs-header-actions ifs-header-actions--desktop">
+        <v-chip
+          small
+          label
+          outlined
+          :color="connected ? 'success' : 'warning'"
+        >
+          {{ connected ? $t('app.ad5x_ifs.connected') : $t('app.ad5x_ifs.disconnected') }}
+        </v-chip>
+
+        <app-btn
+          small
+          outlined
+          color="primary"
+          @click.stop="openManager"
+        >
+          {{ $t('app.ad5x_ifs.manage') }}
+        </app-btn>
+      </div>
     </template>
 
     <v-card-text class="ifs-card-content pt-3 pb-3">
@@ -383,6 +416,33 @@ export default Vue.extend({
   background: rgba(0, 0, 0, .045);
 }
 
+.ifs-card-title {
+  min-width: 0;
+}
+
+.ifs-card-title__main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.ifs-card-title__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ifs-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ifs-header-actions--mobile {
+  display: none;
+}
+
 .ifs-slots {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -659,6 +719,30 @@ export default Vue.extend({
 }
 
 @media (max-width: 600px) {
+  .ifs-card-title {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    white-space: normal;
+  }
+
+  .ifs-card-title__main {
+    width: 100%;
+  }
+
+  .ifs-header-actions--desktop {
+    display: none;
+  }
+
+  .ifs-header-actions--mobile {
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding-top: 2px;
+  }
+
   .ifs-slots {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
