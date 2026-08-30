@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/native-fluidd-ui-v1
+      - release/standalone-0.6.x
     paths:
       - 'native-fluidd/**'
       - '.github/workflows/native-fluidd.yml'
@@ -64,7 +65,7 @@ jobs:
           PUBLISH_REQUESTED=false
           if [ "$EVENT_NAME" = "schedule" ]; then
             PUBLISH_REQUESTED=true
-          elif [ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" = "main" ]; then
+          elif [ "$EVENT_NAME" = "push" ] && { [ "$REF_NAME" = "main" ] || [ "$REF_NAME" = "release/standalone-0.6.x" ]; }; then
             PUBLISH_REQUESTED=true
           elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "${INPUT_PUBLISH:-false}" = "true" ]; then
             PUBLISH_REQUESTED=true
