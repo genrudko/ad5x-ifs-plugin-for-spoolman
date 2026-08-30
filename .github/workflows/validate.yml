@@ -25,6 +25,9 @@ jobs:
       - name: Check mobile IFS header regression
         run: python3 tests/test_mobile_header_layout.py
 
+      - name: Check native Fluidd patch revision
+        run: python3 tests/test_native_patch_revision.py
+
       - name: Validate example JSON
         run: |
           python3 -m json.tool examples/config.example.json >/dev/null
