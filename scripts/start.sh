@@ -5,7 +5,7 @@ APP_NAME="AD5X IFS Plugin for Spoolman"
 APP_DIR="/usr/data/config/mod_data/ifs_spoolman"
 INNER_BOOT="/opt/config/mod_data/ifs_spoolman/boot_start.sh"
 WAIT_SECONDS="${IFS_START_WAIT_SECONDS:-120}"
-NATIVE_PATCH_REVISION="8"
+NATIVE_PATCH_REVISION="9"
 NATIVE_LOG="$APP_DIR/fluidd_native.log"
 
 find_moonraker_pid() {

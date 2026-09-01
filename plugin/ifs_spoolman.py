@@ -261,12 +261,58 @@ def load_config():
     return config
 
 
+def normalize_spoolman_web_url(value):
+    if not isinstance(value, str):
+        return None
+
+    value = value.strip()
+    if not value:
+        return None
+
+    candidate = value if "://" in value else f"http://{value}"
+
+    try:
+        parsed = urllib.parse.urlparse(candidate)
+    except (TypeError, ValueError):
+        return None
+
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+
+    path = parsed.path.rstrip("/")
+    return f"{parsed.scheme}://{parsed.netloc}{path}"
+
+
+def get_spoolman_web_url():
+    try:
+        payload = http_json(MOONRAKER + "/server/config")
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    result = payload.get("result")
+    config = result.get("config") if isinstance(result, dict) else None
+    spoolman = config.get("spoolman") if isinstance(config, dict) else None
+    server = spoolman.get("server") if isinstance(spoolman, dict) else None
+    return normalize_spoolman_web_url(server)
+
+
 def public_config():
     return {
         "application": "AD5X IFS Plugin for Spoolman",
         "application_version": APP_VERSION,
         "schema_version": CONFIG["schema_version"],
         "moonraker_url": CONFIG["moonraker_url"],
+        "spoolman_url": get_spoolman_web_url(),
         "listen_host": CONFIG["listen_host"],
         "listen_port": CONFIG["listen_port"],
         "slot_count": CONFIG["slot_count"],
@@ -1580,7 +1626,7 @@ function directionInfo(direction) {
   const value = String(direction || "").trim().toLowerCase();
 
   const labels = {
-    coaxial: "Коаксиальный",
+    coaxial: "Коэкструзия",
     longitudinal: "Продольный",
     linear: "Смена по длине",
     gradient: "Градиентный",

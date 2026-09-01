@@ -565,7 +565,7 @@
     if (colors.length < 2) return "";
 
     const map = {
-      coaxial: "Коаксиальный",
+      coaxial: "Коэкструзия",
       longitudinal: "Продольный"
     };
 

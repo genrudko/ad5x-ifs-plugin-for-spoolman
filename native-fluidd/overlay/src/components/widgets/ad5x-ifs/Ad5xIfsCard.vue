@@ -35,6 +35,16 @@
           >
             {{ $t('app.ad5x_ifs.manage') }}
           </app-btn>
+
+          <app-btn
+            x-small
+            outlined
+            :disabled="!spoolmanUrl"
+            title="Открыть Spoolman"
+            @click.stop="openSpoolman"
+          >
+            Spoolman ↗
+          </app-btn>
         </div>
       </div>
     </template>
@@ -57,6 +67,16 @@
           @click.stop="openManager"
         >
           {{ $t('app.ad5x_ifs.manage') }}
+        </app-btn>
+
+        <app-btn
+          small
+          outlined
+          :disabled="!spoolmanUrl"
+          title="Открыть Spoolman"
+          @click.stop="openSpoolman"
+        >
+          Spoolman ↗
         </app-btn>
       </div>
     </template>
@@ -177,11 +197,15 @@
     </v-card-text>
 
     <template #collapsed-content>
-      <v-progress-linear
-        :value="connected ? 100 : 0"
-        :color="connected ? 'success' : 'warning'"
-        :height="4"
-      />
+      <div class="ifs-collapsed-progress">
+        <div
+          class="ifs-collapsed-progress__value"
+          :style="{
+            width: `${collapsedSpool ? percentage(collapsedSpool) : 0}%`,
+            background: spoolGradient(collapsedSpool)
+          }"
+        />
+      </div>
     </template>
   </collapsable-card>
 </template>
@@ -194,6 +218,10 @@ type IfsStatus = {
   moonraker_spool_id?: number | null
   spoolman_connected?: boolean
   assignments?: Record<string, number | null>
+}
+
+type IfsConfig = {
+  spoolman_url?: string | null
 }
 
 type IfsSpool = {
@@ -222,6 +250,7 @@ export default Vue.extend({
       status: null as IfsStatus | null,
       spools: [] as IfsSpool[],
       selectedSlot: null as number | null,
+      spoolmanUrl: null as string | null,
       lastError: null as string | null,
       refreshTimer: null as number | null
     }
@@ -261,18 +290,26 @@ export default Vue.extend({
       return count
     },
 
+    currentSpool (): IfsSpool | null {
+      const spoolId = this.status?.moonraker_spool_id
+      if (spoolId == null) return null
+      return this.spools.find(item => Number(item.id) === Number(spoolId)) || null
+    },
+
+    collapsedSpool (): IfsSpool | null {
+      return this.currentSpool || this.spoolForSlot(this.activeSlot)
+    },
+
     currentSpoolLabel (): string {
       const spoolId = this.status?.moonraker_spool_id
       if (spoolId == null) return '—'
-
-      const spool = this.spools.find(item => Number(item.id) === Number(spoolId))
-      if (!spool) return `ID ${spoolId}`
-
-      return `${this.vendorOf(spool)} · ${this.nameOf(spool)}`
+      if (!this.currentSpool) return `ID ${spoolId}`
+      return `${this.vendorOf(this.currentSpool)} · ${this.nameOf(this.currentSpool)}`
     }
   },
 
   mounted () {
+    void this.refreshSpoolmanUrl()
     void this.refreshData()
     this.refreshTimer = window.setInterval(() => {
       void this.refreshData()
@@ -293,6 +330,17 @@ export default Vue.extend({
       return await response.json() as T
     },
 
+    async refreshSpoolmanUrl () {
+      try {
+        const config = await this.fetchJson<IfsConfig>(`${this.apiBase}/api/config`)
+        this.spoolmanUrl = typeof config?.spoolman_url === 'string' && config.spoolman_url
+          ? config.spoolman_url
+          : null
+      } catch (_) {
+        this.spoolmanUrl = null
+      }
+    },
+
     async refreshData () {
       try {
         const [status, spools] = await Promise.all([
@@ -311,6 +359,23 @@ export default Vue.extend({
 
     openManager () {
       window.open(`${this.apiBase}/`, '_blank', 'noopener,noreferrer')
+    },
+
+    openSpoolman () {
+      if (!this.spoolmanUrl) return
+
+      let target = this.spoolmanUrl
+      try {
+        const url = new URL(target)
+        if (['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
+          url.hostname = window.location.hostname
+        }
+        target = url.toString()
+      } catch (_) {
+        return
+      }
+
+      window.open(target, '_blank', 'noopener,noreferrer')
     },
 
     spoolForSlot (slot: number): IfsSpool | null {
@@ -414,6 +479,17 @@ export default Vue.extend({
 
 .ifs-card-content {
   background: rgba(0, 0, 0, .045);
+}
+
+.ifs-collapsed-progress {
+  height: 4px;
+  overflow: hidden;
+  background: rgba(127, 127, 127, .18);
+}
+
+.ifs-collapsed-progress__value {
+  height: 100%;
+  transition: width .2s ease;
 }
 
 .ifs-card-title {
