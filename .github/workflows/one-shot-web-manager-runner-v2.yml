@@ -1,0 +1,31 @@
+name: One-shot web manager runner v2
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  run-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Preserve patch runner and switch to release branch
+        run: |
+          cp scripts/one_shot_web_manager_ux_fix.py /tmp/one_shot_web_manager_ux_fix.py
+          cp scripts/one_shot_web_manager_ux_fix_v2.py /tmp/one_shot_web_manager_ux_fix_v2.py
+          git fetch origin release/standalone-0.6.x
+          git checkout -B release/standalone-0.6.x origin/release/standalone-0.6.x
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p scripts
+          cp /tmp/one_shot_web_manager_ux_fix.py scripts/one_shot_web_manager_ux_fix.py
+      - name: Run corrected TDD patch and push
+        run: python3 /tmp/one_shot_web_manager_ux_fix_v2.py
