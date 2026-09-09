@@ -56,15 +56,18 @@ fi
 
 ROOT="/proc/$MOON_PID/root"
 NATIVE_MARKER="$ROOT/root/fluidd/ad5x_ifs_native.json"
+CURRENT_FLUIDD_UPSTREAM="$(cat "$ROOT/root/fluidd/.version" 2>/dev/null || true)"
 
 if fluidd_enabled; then
     INSTALLED_NATIVE_PATCH=""
+    INSTALLED_NATIVE_UPSTREAM=""
     if [ -f "$NATIVE_MARKER" ]; then
         INSTALLED_NATIVE_PATCH="$(sed -n 's/.*"patch_revision"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$NATIVE_MARKER" | head -n 1)"
+        INSTALLED_NATIVE_UPSTREAM="$(sed -n 's/.*"upstream_tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NATIVE_MARKER" | head -n 1)"
     fi
 
-    if [ "$INSTALLED_NATIVE_PATCH" != "$NATIVE_PATCH_REVISION" ] && [ -x "$APP_DIR/install_fluidd_native.sh" ]; then
-        echo "$APP_NAME: native Fluidd patch ${INSTALLED_NATIVE_PATCH:-missing} -> $NATIVE_PATCH_REVISION; updating." >>"$NATIVE_LOG" 2>&1 || true
+    if { [ "$INSTALLED_NATIVE_PATCH" != "$NATIVE_PATCH_REVISION" ] || [ "$INSTALLED_NATIVE_UPSTREAM" != "$CURRENT_FLUIDD_UPSTREAM" ]; } && [ -x "$APP_DIR/install_fluidd_native.sh" ]; then
+        echo "$APP_NAME: native Fluidd state patch ${INSTALLED_NATIVE_PATCH:-missing} -> $NATIVE_PATCH_REVISION, upstream ${INSTALLED_NATIVE_UPSTREAM:-missing} -> ${CURRENT_FLUIDD_UPSTREAM:-missing}; updating." >>"$NATIVE_LOG" 2>&1 || true
         AD5X_IFS_FLUIDD_PATCH_REVISION="$NATIVE_PATCH_REVISION" \
             "$APP_DIR/install_fluidd_native.sh" >>"$NATIVE_LOG" 2>&1 || {
                 echo "$APP_NAME: native Fluidd repair unavailable; legacy integration will be used." \

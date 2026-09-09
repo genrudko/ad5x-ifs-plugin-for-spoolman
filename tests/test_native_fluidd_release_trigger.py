@@ -18,3 +18,13 @@ assert re.search(
     workflow,
     re.S,
 ), "standalone release pushes must request compatibility publication"
+
+assert "- cron: '17,47 * * * *'" in workflow, (
+    "native Fluidd upstream polling must run twice per hour so new Fluidd releases "
+    "do not wait up to a day for a compatibility build"
+)
+
+assert "ref: ${{ github.event_name == 'schedule' && 'release/standalone-0.6.x' || github.ref }}" in workflow, (
+    "scheduled runs execute from the default branch, so checkout must explicitly "
+    "use release/standalone-0.6.x as the compatibility source"
+)

@@ -10,7 +10,7 @@ on:
       - 'native-fluidd/**'
       - '.github/workflows/native-fluidd.yml'
   schedule:
-    - cron: '17 3 * * *'
+    - cron: '17,47 * * * *'
   workflow_dispatch:
     inputs:
       upstream_tag:
@@ -32,6 +32,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Scheduled workflows are loaded from the default branch. The native
+          # compatibility source lives on the supported standalone release line.
+          ref: ${{ github.event_name == 'schedule' && 'release/standalone-0.6.x' || github.ref }}
 
       - name: Resolve upstream release and compatibility channels
         id: meta
