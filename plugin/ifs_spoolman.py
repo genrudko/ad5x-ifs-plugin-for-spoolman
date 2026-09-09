@@ -53,6 +53,7 @@ CONFIG_FILE = os.path.join(APP_DIR, "config.json")
 DEFAULT_CONFIG = {
     "schema_version": CONFIG_SCHEMA_VERSION,
     "moonraker_url": "http://127.0.0.1:7125",
+    "spoolman_url": None,
     "listen_host": "0.0.0.0",
     "listen_port": 7913,
     "slot_count": 4,
@@ -151,6 +152,24 @@ def validate_config(raw):
             "HTTP/HTTPS URL без учётных данных, query и fragment"
         )
 
+    spoolman_url_raw = result["spoolman_url"]
+
+    if spoolman_url_raw is None or (
+        isinstance(spoolman_url_raw, str) and not spoolman_url_raw.strip()
+    ):
+        spoolman_url = None
+    elif not isinstance(spoolman_url_raw, str):
+        raise ValueError(
+            "config.json: spoolman_url должен быть строкой или null"
+        )
+    else:
+        spoolman_url = normalize_spoolman_web_url(spoolman_url_raw)
+        if spoolman_url is None:
+            raise ValueError(
+                "config.json: spoolman_url должен быть корректным HTTP/HTTPS URL "
+                "без учётных данных, query и fragment"
+            )
+
     listen_host = result["listen_host"]
 
     if not isinstance(listen_host, str) or not listen_host.strip():
@@ -171,6 +190,7 @@ def validate_config(raw):
     return {
         "schema_version": schema_version,
         "moonraker_url": moonraker_url,
+        "spoolman_url": spoolman_url,
         "listen_host": listen_host.strip(),
         "listen_port": plain_int("listen_port", 1, 65535),
         "slot_count": slot_count,
@@ -290,7 +310,7 @@ def normalize_spoolman_web_url(value):
     return f"{parsed.scheme}://{parsed.netloc}{path}"
 
 
-def get_spoolman_web_url():
+def get_moonraker_spoolman_web_url():
     try:
         payload = http_json(MOONRAKER + "/server/config")
     except Exception:
@@ -306,6 +326,13 @@ def get_spoolman_web_url():
     return normalize_spoolman_web_url(server)
 
 
+def get_spoolman_web_url():
+    configured = CONFIG.get("spoolman_url")
+    if configured:
+        return configured
+    return get_moonraker_spoolman_web_url()
+
+
 def public_config():
     return {
         "application": "AD5X IFS Plugin for Spoolman",
@@ -313,6 +340,7 @@ def public_config():
         "schema_version": CONFIG["schema_version"],
         "moonraker_url": CONFIG["moonraker_url"],
         "spoolman_url": get_spoolman_web_url(),
+        "spoolman_url_override": CONFIG["spoolman_url"],
         "listen_host": CONFIG["listen_host"],
         "listen_port": CONFIG["listen_port"],
         "slot_count": CONFIG["slot_count"],
@@ -337,6 +365,30 @@ def public_config():
         "fluidd_integration": CONFIG["fluidd_integration"],
         "config_file": CONFIG_FILE,
     }
+
+
+def update_public_config(raw):
+    if not isinstance(raw, dict):
+        raise ValueError("Настройки должны быть JSON-объектом")
+
+    unknown = sorted(set(raw) - {"spoolman_url"})
+    if unknown:
+        raise ValueError(
+            "Через веб-интерфейс нельзя менять параметры: " + ", ".join(unknown)
+        )
+    if "spoolman_url" not in raw:
+        raise ValueError("Не указан параметр spoolman_url")
+
+    candidate = dict(CONFIG)
+    candidate["spoolman_url"] = raw.get("spoolman_url")
+    validated = validate_config(candidate)
+
+    with lock:
+        atomic_write_json(CONFIG_FILE, validated)
+        CONFIG.clear()
+        CONFIG.update(validated)
+
+    return public_config()
 
 
 CONFIG = load_config()
@@ -1086,6 +1138,65 @@ h1 {
   cursor: pointer;
 }
 
+.settings {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.settings summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 16px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  list-style: none;
+}
+
+.settings summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-body {
+  padding: 0 16px 16px;
+}
+
+.settings-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.settings-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  outline: none;
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.settings-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .15);
+}
+
+.settings-hint {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .diagnostics {
   margin-top: 18px;
   border: 1px solid var(--border);
@@ -1425,6 +1536,35 @@ h1 {
 
   <main class="slots-grid" id="slotsGrid"></main>
 
+  <details class="settings" id="settingsPanel">
+    <summary>
+      <span>Настройки</span>
+      <span>Spoolman</span>
+    </summary>
+
+    <div class="settings-body">
+      <label class="field-label" for="spoolmanUrlInput">
+        Адрес веб-интерфейса Spoolman
+      </label>
+      <div class="settings-row">
+        <input
+          class="settings-input"
+          id="spoolmanUrlInput"
+          type="text"
+          inputmode="url"
+          autocomplete="url"
+          placeholder="http://192.168.1.50:7912"
+        >
+        <button class="btn btn-primary" id="saveConfigButton" type="button">
+          Сохранить
+        </button>
+      </div>
+      <div class="settings-hint" id="spoolmanUrlEffective">
+        Если поле пустое, адрес берётся из конфигурации Moonraker.
+      </div>
+    </div>
+  </details>
+
   <details class="diagnostics">
     <summary>
       <span>Диагностика</span>
@@ -1485,6 +1625,8 @@ let originalAssignments = {};
 let draftAssignments = {};
 let searchQuery = "";
 let requestInProgress = false;
+let configData = null;
+let slotsRenderPending = false;
 
 const el = id => document.getElementById(id);
 
@@ -2014,7 +2156,43 @@ function renderSlots() {
 
       renderAll();
     });
+
+    select.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        if (!slotSelectIsActive()) {
+          flushPendingSlotsRender();
+        }
+      }, 0);
+    });
   });
+}
+
+function slotSelectIsActive() {
+  const active = document.activeElement;
+  return Boolean(
+    active &&
+    active.classList &&
+    active.classList.contains("slot-select")
+  );
+}
+
+function renderSlotsPreservingInteraction() {
+  if (slotSelectIsActive()) {
+    slotsRenderPending = true;
+    return;
+  }
+
+  slotsRenderPending = false;
+  renderSlots();
+}
+
+function flushPendingSlotsRender() {
+  if (!slotsRenderPending || slotSelectIsActive()) {
+    return;
+  }
+
+  slotsRenderPending = false;
+  renderSlots();
 }
 
 function renderSummary() {
@@ -2097,10 +2275,68 @@ function renderChangeState() {
 function renderAll() {
   renderSummary();
   renderConnection();
-  renderSlots();
+  renderSlotsPreservingInteraction();
   renderDiagnostics();
   renderSearchCount();
   renderChangeState();
+}
+
+function renderWebSettings() {
+  if (!configData) {
+    return;
+  }
+
+  const input = el("spoolmanUrlInput");
+  if (document.activeElement !== input) {
+    input.value = configData.spoolman_url_override || "";
+  }
+
+  el("spoolmanUrlEffective").textContent = configData.spoolman_url
+    ? `Используется: ${configData.spoolman_url}`
+    : "Адрес не определён. Укажи URL Spoolman и сохрани настройки.";
+}
+
+async function loadWebSettings() {
+  try {
+    configData = await api("/api/config");
+    renderWebSettings();
+  } catch (error) {
+    el("spoolmanUrlEffective").textContent =
+      `Не удалось загрузить настройки: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+async function saveWebSettings() {
+  const value = el("spoolmanUrlInput").value.trim();
+  setLoading(true, "Сохранение настроек…");
+
+  try {
+    configData = await api("/api/config", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        spoolman_url: value || null
+      })
+    });
+    renderWebSettings();
+    showToast(
+      "success",
+      "Настройки сохранены",
+      configData.spoolman_url
+        ? `Spoolman: ${configData.spoolman_url}`
+        : "Используется автоматическое определение через Moonraker"
+    );
+  } catch (error) {
+    showToast(
+      "error",
+      "Ошибка настроек",
+      error instanceof Error ? error.message : String(error)
+    );
+  } finally {
+    setLoading(false);
+  }
 }
 
 async function loadData({
@@ -2290,6 +2526,7 @@ el("resetButton").addEventListener("click", () => {
   );
 });
 
+el("saveConfigButton").addEventListener("click", saveWebSettings);
 el("saveButton").addEventListener("click", saveAssignments);
 el("syncButton").addEventListener("click", synchronize);
 
@@ -2301,6 +2538,8 @@ window.addEventListener("beforeunload", event => {
   event.preventDefault();
   event.returnValue = "";
 });
+
+void loadWebSettings();
 
 loadData({
   showLoader: true
@@ -3631,6 +3870,10 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc: self.send_json(500,{"error":str(exc)})
     def do_POST(self):
         try:
+            if self.path=="/api/config":
+                body=self.read_json()
+                self.send_json(200,update_public_config(body))
+                return
             if self.path=="/api/assign":
                 body=self.read_json(); slot=int(body.get("slot"))
                 if slot not in (1,2,3,4): raise ValueError("Некорректный слот")

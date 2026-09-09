@@ -39,6 +39,7 @@
           <app-btn
             x-small
             outlined
+            class="ifs-spoolman-link"
             :disabled="!spoolmanUrl"
             title="Открыть Spoolman"
             @click.stop="openSpoolman"
@@ -72,6 +73,7 @@
         <app-btn
           small
           outlined
+          class="ifs-spoolman-link"
           :disabled="!spoolmanUrl"
           title="Открыть Spoolman"
           @click.stop="openSpoolman"
@@ -517,6 +519,12 @@ export default Vue.extend({
 
 .ifs-header-actions--mobile {
   display: none;
+}
+
+.ifs-spoolman-link.v-btn--disabled {
+  color: inherit !important;
+  border-color: currentColor !important;
+  opacity: .62 !important;
 }
 
 .ifs-slots {
