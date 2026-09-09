@@ -26,8 +26,10 @@ Current native changes are intentionally limited to:
 
 No IFS backend, Z-Mod runtime or Moonraker code is copied into Fluidd.
 
-The first hardware/UI acceptance target is Sergey Fluidd `v1.37.4` (`7f024c08aac4093aa8aa2e26e329df5832ebe778`).
+The first hardware/UI acceptance target was Sergey Fluidd `v1.37.4` (`7f024c08aac4093aa8aa2e26e329df5832ebe778`). Compatibility builds are now generated for each detected upstream release.
+
+`native-fluidd/config.json` carries an independent `patch_revision`. UI-behavior changes increment that revision so the plugin can repair/reinstall its native bundle even when the upstream Fluidd tag itself has not changed.
 
 ## Automation
 
-`.github/workflows/native-fluidd.yml` checks the latest `ghzserg/fluidd` release once per day at `03:17 UTC`, with a manual trigger available as well. Feature-branch pushes build and upload a CI artifact only. Main-branch scheduled/manual runs may publish a compatibility release after all checks pass.
+`.github/workflows/native-fluidd.yml` polls the latest `ghzserg/fluidd` release twice per hour (`:17` and `:47`) and also supports manual runs. Scheduled runs are loaded from the GitHub default branch but explicitly check out the supported `release/standalone-0.6.x` source before resolving the compatibility revision. Release-line pushes build and publish the rolling compatibility artifact after all checks pass.
