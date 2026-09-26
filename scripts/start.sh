@@ -56,7 +56,36 @@ fi
 
 ROOT="/proc/$MOON_PID/root"
 NATIVE_MARKER="$ROOT/root/fluidd/ad5x_ifs_native.json"
-CURRENT_FLUIDD_UPSTREAM="$(cat "$ROOT/root/fluidd/.version" 2>/dev/null || true)"
+current_fluidd_version() {
+    FLUIDD_ROOT="$ROOT/root/fluidd"
+    VERSION=""
+
+    if [ -f "$FLUIDD_ROOT/release_info.json" ]; then
+        PROJECT_NAME="$(sed -n 's/.*"project_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FLUIDD_ROOT/release_info.json" | head -n 1)"
+        PROJECT_OWNER="$(sed -n 's/.*"project_owner"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FLUIDD_ROOT/release_info.json" | head -n 1)"
+        VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FLUIDD_ROOT/release_info.json" | head -n 1)"
+        case "$VERSION" in
+            v[0-9]*.[0-9]*.[0-9]*)
+                if [ "$PROJECT_NAME" = "fluidd" ] && [ "$PROJECT_OWNER" = "ghzserg" ]; then
+                    printf '%s\n' "$VERSION"
+                    return 0
+                fi
+                ;;
+        esac
+    fi
+
+    VERSION="$(cat "$FLUIDD_ROOT/.version" 2>/dev/null || true)"
+    case "$VERSION" in
+        v[0-9]*.[0-9]*.[0-9]*)
+            printf '%s\n' "$VERSION"
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
+CURRENT_FLUIDD_UPSTREAM="$(current_fluidd_version 2>/dev/null || true)"
 
 if fluidd_enabled; then
     INSTALLED_NATIVE_PATCH=""

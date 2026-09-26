@@ -134,14 +134,109 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-[ -d "$FLUIDD_DIR" ] || fail "Fluidd directory not found inside Moonraker root"
-[ -f "$FLUIDD_DIR/.version" ] || fail "Fluidd .version is missing"
+valid_fluidd_version() {
+    case "$1" in
+        v[0-9]*.[0-9]*.[0-9]*) return 0 ;;
+    esac
+    return 1
+}
 
-UPSTREAM_TAG="$(cat "$FLUIDD_DIR/.version" 2>/dev/null || true)"
-case "$UPSTREAM_TAG" in
-    v[0-9]*.[0-9]*.[0-9]*) ;;
-    *) fail "unsupported Fluidd version value: $UPSTREAM_TAG" ;;
-esac
+release_info_version() {
+    INFO_FILE="$1"
+    [ -f "$INFO_FILE" ] || return 1
+
+    PROJECT_NAME="$(sed -n 's/.*"project_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INFO_FILE" | head -n 1)"
+    PROJECT_OWNER="$(sed -n 's/.*"project_owner"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INFO_FILE" | head -n 1)"
+    PROJECT_VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INFO_FILE" | head -n 1)"
+
+    [ "$PROJECT_NAME" = "fluidd" ] || return 1
+    [ "$PROJECT_OWNER" = "ghzserg" ] || return 1
+    valid_fluidd_version "$PROJECT_VERSION" || return 1
+
+    printf '%s\n' "$PROJECT_VERSION"
+}
+
+moonraker_fluidd_version() {
+    command -v wget >/dev/null 2>&1 || return 1
+
+    STATUS_FILE="$WORK_DIR/moonraker-update-status.json"
+    STATUS_INNER="/root/.ad5x-ifs-native-fluidd.$$/moonraker-update-status.json"
+
+    wget -qO "$STATUS_FILE" \
+        "http://127.0.0.1:7125/machine/update/status?refresh=false" || return 1
+
+    chroot "$ROOT" /bin/sh -c '[ -x /root/moonraker-env/bin/python3 ]' || return 1
+    chroot "$ROOT" /root/moonraker-env/bin/python3 - "$STATUS_INNER" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, "r", encoding="utf-8") as stream:
+        payload = json.load(stream)
+except Exception:
+    raise SystemExit(1)
+
+root = payload.get("result", payload)
+info = root.get("version_info")
+if not isinstance(info, dict):
+    raise SystemExit(1)
+
+entry = info.get("fluidd")
+if not isinstance(entry, dict):
+    for candidate in info.values():
+        if isinstance(candidate, dict) and candidate.get("name") == "fluidd":
+            entry = candidate
+            break
+
+if not isinstance(entry, dict):
+    raise SystemExit(1)
+
+owner = entry.get("owner")
+if owner not in (None, "", "ghzserg"):
+    raise SystemExit(1)
+
+version = entry.get("version")
+if not isinstance(version, str) or not version.startswith("v"):
+    raise SystemExit(1)
+
+print(version)
+PY
+}
+
+resolve_fluidd_version() {
+    VERSION=""
+
+    VERSION="$(release_info_version "$FLUIDD_DIR/release_info.json" 2>/dev/null || true)"
+    if valid_fluidd_version "$VERSION"; then
+        echo "Fluidd version source: release_info.json" >&2
+        printf '%s\n' "$VERSION"
+        return 0
+    fi
+
+    VERSION="$(cat "$FLUIDD_DIR/.version" 2>/dev/null || true)"
+    if valid_fluidd_version "$VERSION"; then
+        echo "Fluidd version source: .version" >&2
+        printf '%s\n' "$VERSION"
+        return 0
+    fi
+
+    VERSION="$(moonraker_fluidd_version 2>/dev/null || true)"
+    if valid_fluidd_version "$VERSION"; then
+        echo "Fluidd version source: Moonraker update_manager" >&2
+        printf '%s\n' "$VERSION"
+        return 0
+    fi
+
+    return 1
+}
+
+[ -d "$FLUIDD_DIR" ] || fail "Fluidd directory not found inside Moonraker root"
+mkdir -p "$WORK_DIR" "$NEW_DIR"
+
+UPSTREAM_TAG="$(resolve_fluidd_version || true)"
+valid_fluidd_version "$UPSTREAM_TAG" ||
+    fail "cannot resolve installed Fluidd version from release_info.json, .version, or Moonraker update_manager"
 
 RAW_BASE="https://raw.githubusercontent.com/${REPO}/${RAW_BRANCH}/${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}"
 
@@ -165,8 +260,6 @@ if [ -f "$FLUIDD_DIR/ad5x_ifs_native.json" ]; then
         exit 0
     fi
 fi
-
-mkdir -p "$WORK_DIR" "$NEW_DIR"
 
 echo "Fluidd upstream: $UPSTREAM_TAG"
 echo "Native IFS UI patch: $PATCH_REVISION"

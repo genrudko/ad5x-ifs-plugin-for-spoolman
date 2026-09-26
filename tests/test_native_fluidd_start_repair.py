@@ -44,3 +44,26 @@ assert 'chroot "$ZMOD_ROOT" git -C "$ZMOD_SOURCE_REPO" fetch' in native_installe
 assert 'chroot "$ROOT" git -C' not in native_installer, (
     'native installer must not mix Moonraker process root with Z-Mod plugin paths'
 )
+
+assert 'release_info_version()' in native_installer, (
+    'native installer must resolve Fluidd identity from release_info.json'
+)
+assert 'moonraker_fluidd_version()' in native_installer, (
+    'native installer must fall back to Moonraker update_manager version state'
+)
+assert '[ -f "$FLUIDD_DIR/.version" ] || fail "Fluidd .version is missing"' not in native_installer, (
+    'missing active Fluidd .version alone must not abort native Fluidd repair'
+)
+assert 'cannot resolve installed Fluidd version from release_info.json, .version, or Moonraker update_manager' in native_installer, (
+    'version resolution must fail closed only after all supported identity sources fail'
+)
+
+assert 'STATUS_INNER="/root/.ad5x-ifs-native-fluidd.$$/moonraker-update-status.json"' in native_installer, (
+    'Moonraker status JSON path must match the host work directory inside the chroot'
+)
+assert 'current_fluidd_version()' in start, (
+    'start.sh must resolve current Fluidd version without requiring .version'
+)
+assert 'release_info.json' in start, (
+    'start.sh must use Sergey Fluidd release_info.json when .version is absent'
+)
