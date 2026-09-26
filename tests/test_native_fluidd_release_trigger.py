@@ -19,10 +19,18 @@ assert re.search(
     re.S,
 ), "standalone release pushes must request compatibility publication"
 
-assert "- cron: '17,47 * * * *'" in workflow, (
-    "native Fluidd upstream polling must run twice per hour so new Fluidd releases "
-    "do not wait up to a day for a compatibility build"
+assert "- cron: '17 3 * * *'" in workflow, (
+    "native Fluidd upstream polling must run once per day"
 )
+assert "- cron: '17,47 * * * *'" not in workflow
+
+assert "gh api \"repos/${UPSTREAM_REPO}/releases/latest\" --jq '.tag_name'" in workflow, (
+    "upstream release lookup must use authenticated GitHub API access"
+)
+assert "native-fluidd/release-state.json" in workflow
+assert "Resolve plugin release state" in workflow
+assert "git push --atomic origin HEAD:\"$RELEASE_BRANCH\" \"refs/tags/$NEW_TAG\"" in workflow
+assert "gh release create \"$NEW_TAG\"" in workflow
 
 assert "ref: ${{ github.event_name == 'schedule' && 'release/standalone-0.6.x' || github.ref }}" in workflow, (
     "scheduled runs execute from the default branch, so checkout must explicitly "
