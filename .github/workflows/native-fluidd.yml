@@ -84,16 +84,15 @@ jobs:
           RAW_PUBLISHED=false
           if [ "$PUBLISH_REQUESTED" = "true" ]; then
             if gh release view "$DIST_RELEASE_TAG" >/dev/null 2>&1; then
-              if gh release view "$DIST_RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fx "$ASSET_NAME" >/dev/null 2>&1; then
+              RELEASE_ASSETS="$(gh release view "$DIST_RELEASE_TAG" --json assets --jq '.assets[].name')"
+              if printf '%s\n' "$RELEASE_ASSETS" | grep -Fx "$ASSET_NAME" >/dev/null 2>&1 \
+                && printf '%s\n' "$RELEASE_ASSETS" | grep -Fx "$SHA_ASSET_NAME" >/dev/null 2>&1; then
                 RELEASE_PUBLISHED=true
               fi
             fi
 
-            if curl -fsSL \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              -o /dev/null \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/${RAW_PATH}/fluidd.zip?ref=${RAW_BRANCH}"; then
+            if gh api "repos/${GITHUB_REPOSITORY}/contents/${RAW_PATH}/fluidd.zip?ref=${RAW_BRANCH}" >/dev/null 2>&1 \
+              && gh api "repos/${GITHUB_REPOSITORY}/contents/${RAW_PATH}/fluidd.zip.sha256?ref=${RAW_BRANCH}" >/dev/null 2>&1; then
               RAW_PUBLISHED=true
             fi
           fi
@@ -406,6 +405,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git fetch origin "$RELEASE_BRANCH"
+          git fetch --tags origin
           REMOTE_HEAD="$(git rev-parse "origin/$RELEASE_BRANCH")"
           LOCAL_HEAD="$(git rev-parse HEAD)"
           [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ] || {
