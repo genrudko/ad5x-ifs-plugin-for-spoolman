@@ -24,14 +24,23 @@ assert '"$APP_DIR/install_fluidd_card.sh"' not in boot, (
     'boot_start.sh must never automatically reinstall the historical Fluidd DOM injection'
 )
 assert '"$APP_DIR/uninstall_fluidd_card.sh"' in boot, (
-    'boot_start.sh must actively remove stale legacy Fluidd injection'
+    'boot_start.sh must remove stale legacy injection once a native marker exists'
+)
+assert "existing UI state is preserved" in boot, (
+    'failed native migration must not delete the currently working Fluidd UI'
 )
 assert 'legacy automatic fallback is disabled' in start, (
     'native repair failure must be fail-closed instead of restoring legacy injection'
 )
-assert 'CHROOT_SOURCE_REPO="/opt/config/mod_data/plugins/ad5x_ifs_spoolman"' in native_installer, (
-    'native installer must use the actual plugin checkout path inside the Z-Mod chroot'
+assert 'ZMOD_ROOT="/usr/data/.mod/.zmod"' in native_installer, (
+    'native installer must use the documented AD5X Z-Mod chroot root'
 )
-assert 'chroot "$ROOT" git -C "$CHROOT_SOURCE_REPO" fetch' in native_installer, (
-    'chroot git transport must use CHROOT_SOURCE_REPO'
+assert 'ZMOD_SOURCE_REPO="/opt/config/mod_data/plugins/ad5x_ifs_spoolman"' in native_installer, (
+    'native installer must use the documented plugin checkout path inside Z-Mod chroot'
+)
+assert 'chroot "$ZMOD_ROOT" git -C "$ZMOD_SOURCE_REPO" fetch' in native_installer, (
+    'git transport must run inside the Z-Mod chroot, not the Moonraker process root'
+)
+assert 'chroot "$ROOT" git -C' not in native_installer, (
+    'native installer must not mix Moonraker process root with Z-Mod plugin paths'
 )
