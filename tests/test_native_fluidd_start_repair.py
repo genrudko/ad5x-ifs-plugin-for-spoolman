@@ -56,8 +56,8 @@ assert 'fluidd_version_from_dir' in native_installer, (
 assert 'release_info.json' in native_installer, (
     'native installer must accept valid ghzserg/fluidd release metadata when .version is absent'
 )
-assert 'Fluidd .version is missing' not in native_installer, (
-    'missing .version alone must not abort native installation'
+assert '[ -f "$FLUIDD_DIR/.version" ] || fail "Fluidd .version is missing"' not in native_installer, (
+    'missing live .version alone must not abort native installation'
 )
 
 def extract_function(script: str, name: str) -> str:
