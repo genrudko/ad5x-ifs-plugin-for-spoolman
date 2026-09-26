@@ -32,7 +32,9 @@ assert "Resolve plugin release state" in workflow
 assert "git push --atomic origin HEAD:\"$RELEASE_BRANCH\" \"refs/tags/$NEW_TAG\"" in workflow
 assert "gh release create \"$NEW_TAG\"" in workflow
 
-assert "ref: ${{ github.event_name == 'schedule' && 'release/standalone-0.6.x' || github.ref }}" in workflow, (
-    "scheduled runs execute from the default branch, so checkout must explicitly "
-    "use release/standalone-0.6.x as the compatibility source"
+assert "github.event_name == 'workflow_dispatch' && inputs.publish == true" in workflow, (
+    "manual publish runs must be allowed to execute the plugin release path"
+)
+assert "release/standalone-0.6.x" in workflow, (
+    "scheduled/manual publish runs must use the standalone release line as source"
 )
