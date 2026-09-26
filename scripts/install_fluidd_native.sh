@@ -162,8 +162,10 @@ moonraker_fluidd_version() {
     STATUS_FILE="$WORK_DIR/moonraker-update-status.json"
     STATUS_INNER="/root/.ad5x-ifs-native-fluidd.$/moonraker-update-status.json"
 
-    wget -qO "$STATUS_FILE"         "http://127.0.0.1:7125/machine/update/status?refresh=false" || return 1
+    wget -qO "$STATUS_FILE" \
+        "http://127.0.0.1:7125/machine/update/status?refresh=false" || return 1
 
+    chroot "$ROOT" /bin/sh -c '[ -x /root/moonraker-env/bin/python3 ]' || return 1
     chroot "$ROOT" /root/moonraker-env/bin/python3 - "$STATUS_INNER" <<'PY'
 import json
 import sys
