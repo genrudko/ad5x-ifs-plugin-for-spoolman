@@ -57,3 +57,7 @@ assert 'Fluidd .version is missing' not in native_installer, (
 assert 'cannot resolve installed Fluidd version from release_info.json, .version, or Moonraker update_manager' in native_installer, (
     'version resolution must fail closed only after all supported identity sources fail'
 )
+
+assert 'STATUS_INNER="/root/.ad5x-ifs-native-fluidd.$$/moonraker-update-status.json"' in native_installer, (
+    'Moonraker status JSON path must match the host work directory inside the chroot'
+)
