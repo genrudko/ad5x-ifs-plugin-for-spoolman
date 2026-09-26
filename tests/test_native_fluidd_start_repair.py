@@ -51,8 +51,8 @@ assert 'release_info_version()' in native_installer, (
 assert 'moonraker_fluidd_version()' in native_installer, (
     'native installer must fall back to Moonraker update_manager version state'
 )
-assert 'Fluidd .version is missing' not in native_installer, (
-    'missing .version alone must not abort native Fluidd repair'
+assert '[ -f "$FLUIDD_DIR/.version" ] || fail "Fluidd .version is missing"' not in native_installer, (
+    'missing active Fluidd .version alone must not abort native Fluidd repair'
 )
 assert 'cannot resolve installed Fluidd version from release_info.json, .version, or Moonraker update_manager' in native_installer, (
     'version resolution must fail closed only after all supported identity sources fail'
