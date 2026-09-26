@@ -39,10 +39,12 @@ jobs:
           python3 -m json.tool examples/config.example.json >/dev/null
           python3 -m json.tool examples/assignments.example.json >/dev/null
           python3 -m json.tool native-fluidd/config.json >/dev/null
+          python3 -m json.tool native-fluidd/release-state.json >/dev/null
 
       - name: Validate standalone release invariants
         run: |
-          test "$(cat VERSION)" = "0.6.6-beta"
+          grep -Eq '^0\.6\.[0-9]+-beta$' VERSION
+          test "$(jq -r '.plugin_version' native-fluidd/release-state.json)" = "$(cat VERSION)"
           grep -F 'APP_VERSION = "0.5.1-beta"' plugin/ifs_spoolman.py
           grep -F 'server_version="IFS-Spoolman/0.5.1-beta"' plugin/ifs_spoolman.py
           grep -F 'slot_count = plain_int("slot_count", 4, 4)' plugin/ifs_spoolman.py
@@ -55,7 +57,7 @@ jobs:
           grep -F 'NATIVE_PATCH_REVISION="4"' zmod-install.sh
           grep -F 'AD5X_IFS_FLUIDD_PATCH_REVISION:-4' scripts/install_fluidd_native.sh
           grep -F 'AD5X IFS Spoolman' native-fluidd/apply_overlay.py
-          grep -F '"patch_revision": 4' native-fluidd/config.json
+          grep -F '"patch_revision": 10' native-fluidd/config.json
           grep -F 'BACKUP_KEEP=5' update.sh
           grep -F 'BACKUP_KEEP=5' scripts/update.sh
           grep -F 'power_on_hook.sh' install.sh >/dev/null
