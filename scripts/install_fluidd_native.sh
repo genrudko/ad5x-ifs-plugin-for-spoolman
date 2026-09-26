@@ -160,7 +160,7 @@ moonraker_fluidd_version() {
     command -v wget >/dev/null 2>&1 || return 1
 
     STATUS_FILE="$WORK_DIR/moonraker-update-status.json"
-    STATUS_INNER="/root/.ad5x-ifs-native-fluidd.$/moonraker-update-status.json"
+    STATUS_INNER="/root/.ad5x-ifs-native-fluidd.$$/moonraker-update-status.json"
 
     wget -qO "$STATUS_FILE" \
         "http://127.0.0.1:7125/machine/update/status?refresh=false" || return 1
