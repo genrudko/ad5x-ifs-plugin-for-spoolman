@@ -9,7 +9,7 @@ on:
       - 'native-fluidd/**'
       - '.github/workflows/native-fluidd.yml'
   schedule:
-    - cron: '17,47 * * * *'
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       upstream_tag:
@@ -25,6 +25,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: native-fluidd-compatibility-release
+  cancel-in-progress: false
+
 jobs:
   build-native-fluidd:
     runs-on: ubuntu-latest
@@ -35,6 +39,7 @@ jobs:
           # Scheduled workflows are loaded from the default branch, but the
           # supported native compatibility source is the standalone release line.
           ref: ${{ github.event_name == 'schedule' && 'release/standalone-0.6.x' || github.ref }}
+          fetch-depth: 0
 
       - name: Resolve upstream release and compatibility channels
         id: meta
@@ -55,7 +60,7 @@ jobs:
           if [ -n "${INPUT_UPSTREAM_TAG:-}" ]; then
             UPSTREAM_TAG="$INPUT_UPSTREAM_TAG"
           else
-            UPSTREAM_TAG="$(curl -fsSL "https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest" | jq -r '.tag_name')"
+            UPSTREAM_TAG="$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq '.tag_name')"
           fi
 
           test -n "$UPSTREAM_TAG"
@@ -78,16 +83,15 @@ jobs:
           RAW_PUBLISHED=false
           if [ "$PUBLISH_REQUESTED" = "true" ]; then
             if gh release view "$DIST_RELEASE_TAG" >/dev/null 2>&1; then
-              if gh release view "$DIST_RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fx "$ASSET_NAME" >/dev/null 2>&1; then
+              RELEASE_ASSETS="$(gh release view "$DIST_RELEASE_TAG" --json assets --jq '.assets[].name')"
+              if printf '%s\n' "$RELEASE_ASSETS" | grep -Fx "$ASSET_NAME" >/dev/null 2>&1 \
+                && printf '%s\n' "$RELEASE_ASSETS" | grep -Fx "$SHA_ASSET_NAME" >/dev/null 2>&1; then
                 RELEASE_PUBLISHED=true
               fi
             fi
 
-            if curl -fsSL \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              -o /dev/null \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/${RAW_PATH}/fluidd.zip?ref=${RAW_BRANCH}"; then
+            if gh api "repos/${GITHUB_REPOSITORY}/contents/${RAW_PATH}/fluidd.zip?ref=${RAW_BRANCH}" >/dev/null 2>&1 \
+              && gh api "repos/${GITHUB_REPOSITORY}/contents/${RAW_PATH}/fluidd.zip.sha256?ref=${RAW_BRANCH}" >/dev/null 2>&1; then
               RAW_PUBLISHED=true
             fi
           fi
@@ -290,3 +294,199 @@ jobs:
             git -C raw-channel commit -m "dist: add Fluidd ${{ steps.meta.outputs.upstream_tag }} IFS UI v${{ steps.meta.outputs.patch_revision }}"
             git -C raw-channel push origin HEAD:"$RAW_BRANCH"
           fi
+
+      - name: Resolve plugin release state
+        id: plugin_release
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_TAG: ${{ steps.meta.outputs.upstream_tag }}
+          PATCH_REVISION: ${{ steps.meta.outputs.patch_revision }}
+        run: |
+          set -eu
+
+          STATE_FILE="native-fluidd/release-state.json"
+          [ -f "$STATE_FILE" ] || {
+            echo "Missing release state: $STATE_FILE" >&2
+            exit 1
+          }
+
+          CURRENT_VERSION="$(cat VERSION)"
+          STATE_VERSION="$(jq -r '.plugin_version // empty' "$STATE_FILE")"
+          STATE_UPSTREAM="$(jq -r '.fluidd_upstream_tag // empty' "$STATE_FILE")"
+          STATE_PATCH="$(jq -r '.patch_revision // empty' "$STATE_FILE")"
+
+          [ -n "$STATE_VERSION" ] && [ -n "$STATE_UPSTREAM" ] && [ -n "$STATE_PATCH" ] || {
+            echo "Incomplete release state: $STATE_FILE" >&2
+            exit 1
+          }
+          [ "$STATE_VERSION" = "$CURRENT_VERSION" ] || {
+            echo "VERSION ($CURRENT_VERSION) and release state ($STATE_VERSION) diverged." >&2
+            exit 1
+          }
+
+          RELEASE_NEEDED=false
+          VERSION_BUMP_NEEDED=false
+
+          if [ "$STATE_UPSTREAM" != "$UPSTREAM_TAG" ] || [ "$STATE_PATCH" != "$PATCH_REVISION" ]; then
+            RELEASE_NEEDED=true
+            VERSION_BUMP_NEEDED=true
+          elif ! gh release view "v${STATE_VERSION}" >/dev/null 2>&1; then
+            RELEASE_NEEDED=true
+          fi
+
+          {
+            echo "release_needed=$RELEASE_NEEDED"
+            echo "version_bump_needed=$VERSION_BUMP_NEEDED"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Plugin release needed: $RELEASE_NEEDED"
+          echo "Version bump needed: $VERSION_BUMP_NEEDED"
+
+      - name: Verify published compatibility channels
+        if: steps.plugin_release.outputs.release_needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIST_RELEASE_TAG: ${{ steps.meta.outputs.dist_release_tag }}
+          RAW_BRANCH: ${{ steps.meta.outputs.raw_branch }}
+          RAW_PATH: ${{ steps.meta.outputs.raw_path }}
+          ASSET_NAME: ${{ steps.meta.outputs.asset_name }}
+          SHA_ASSET_NAME: ${{ steps.meta.outputs.sha_asset_name }}
+        run: |
+          set -eu
+
+          RELEASE_ASSETS="$(gh release view "$DIST_RELEASE_TAG" --json assets --jq '.assets[].name')"
+          printf '%s\n' "$RELEASE_ASSETS" | grep -Fx "$ASSET_NAME" >/dev/null
+          printf '%s\n' "$RELEASE_ASSETS" | grep -Fx "$SHA_ASSET_NAME" >/dev/null
+
+          gh api "repos/${GITHUB_REPOSITORY}/contents/${RAW_PATH}/fluidd.zip?ref=${RAW_BRANCH}" >/dev/null
+          gh api "repos/${GITHUB_REPOSITORY}/contents/${RAW_PATH}/fluidd.zip.sha256?ref=${RAW_BRANCH}" >/dev/null
+
+      - name: Validate plugin release source
+        if: steps.plugin_release.outputs.release_needed == 'true'
+        run: |
+          set -eu
+
+          python3 -m py_compile plugin/ifs_spoolman.py
+          rm -rf plugin/__pycache__
+
+          sh -n install.sh
+          sh -n update.sh
+          sh -n zmod-install.sh
+          for FILE in scripts/*.sh; do
+            sh -n "$FILE"
+          done
+
+          python3 -m json.tool native-fluidd/config.json >/dev/null
+          python3 -m json.tool native-fluidd/release-state.json >/dev/null
+
+          for TEST_FILE in tests/test_*.py; do
+            python3 "$TEST_FILE"
+          done
+
+          git diff --check
+
+      - name: Advance release branch and publish plugin release
+        if: steps.plugin_release.outputs.release_needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_TAG: ${{ steps.meta.outputs.upstream_tag }}
+          PATCH_REVISION: ${{ steps.meta.outputs.patch_revision }}
+          VERSION_BUMP_NEEDED: ${{ steps.plugin_release.outputs.version_bump_needed }}
+          ASSET_NAME: ${{ steps.meta.outputs.asset_name }}
+        run: |
+          set -eu
+
+          RELEASE_BRANCH="release/standalone-0.6.x"
+          STATE_FILE="native-fluidd/release-state.json"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin "$RELEASE_BRANCH"
+          git fetch --tags origin
+          REMOTE_HEAD="$(git rev-parse "origin/$RELEASE_BRANCH")"
+          LOCAL_HEAD="$(git rev-parse HEAD)"
+          [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ] || {
+            echo "Release branch moved during the run: local=$LOCAL_HEAD remote=$REMOTE_HEAD" >&2
+            exit 1
+          }
+
+          CURRENT_VERSION="$(cat VERSION)"
+          NEW_VERSION="$CURRENT_VERSION"
+          NEW_TAG="v${NEW_VERSION}"
+
+          if [ "$VERSION_BUMP_NEEDED" = "true" ]; then
+            printf '%s\n' "$CURRENT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-beta$' || {
+              echo "Unsupported VERSION format: $CURRENT_VERSION" >&2
+              exit 1
+            }
+
+            VERSION_CORE="${CURRENT_VERSION%-beta}"
+            MAJOR="$(printf '%s' "$VERSION_CORE" | cut -d. -f1)"
+            MINOR="$(printf '%s' "$VERSION_CORE" | cut -d. -f2)"
+            PATCH="$(printf '%s' "$VERSION_CORE" | cut -d. -f3)"
+            NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-beta"
+            NEW_TAG="v${NEW_VERSION}"
+
+            if git ls-remote --exit-code --tags origin "refs/tags/$NEW_TAG" >/dev/null 2>&1; then
+              echo "Refusing to overwrite existing tag: $NEW_TAG" >&2
+              exit 1
+            fi
+
+            printf '%s\n' "$NEW_VERSION" > VERSION
+            jq -n \
+              --arg plugin_version "$NEW_VERSION" \
+              --arg fluidd_upstream_tag "$UPSTREAM_TAG" \
+              --argjson patch_revision "$PATCH_REVISION" \
+              '{
+                plugin_version: $plugin_version,
+                fluidd_upstream_tag: $fluidd_upstream_tag,
+                patch_revision: $patch_revision
+              }' > "$STATE_FILE.tmp"
+            mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+            python3 -m json.tool "$STATE_FILE" >/dev/null
+            grep -Eq '^0\.6\.[0-9]+-beta$' VERSION
+            for TEST_FILE in tests/test_*.py; do
+              python3 "$TEST_FILE"
+            done
+            git diff --check
+
+            git add VERSION "$STATE_FILE"
+            git commit -m "release: support Fluidd ${UPSTREAM_TAG} (IFS UI v${PATCH_REVISION})"
+            git tag "$NEW_TAG" "$(git rev-parse HEAD)"
+            git push --atomic origin HEAD:"$RELEASE_BRANCH" "refs/tags/$NEW_TAG"
+          else
+            [ "$(jq -r '.plugin_version' "$STATE_FILE")" = "$CURRENT_VERSION" ]
+            [ "$(jq -r '.fluidd_upstream_tag' "$STATE_FILE")" = "$UPSTREAM_TAG" ]
+            [ "$(jq -r '.patch_revision' "$STATE_FILE")" = "$PATCH_REVISION" ]
+            git ls-remote --exit-code --tags origin "refs/tags/$NEW_TAG" >/dev/null 2>&1 || {
+              echo "Release state is current but tag $NEW_TAG is missing; refusing an ambiguous recovery." >&2
+              exit 1
+            }
+          fi
+
+          if gh release view "$NEW_TAG" >/dev/null 2>&1; then
+            echo "Plugin release already exists: $NEW_TAG"
+            exit 0
+          fi
+
+          TARGET_COMMIT="$(git rev-list -n 1 "$NEW_TAG")"
+          RELEASE_NOTES="$(printf '%s\n' \
+            'Automatic Fluidd compatibility release.' \
+            '' \
+            "- Sergey Fluidd: \`${UPSTREAM_TAG}\`" \
+            "- Native IFS UI patch revision: \`${PATCH_REVISION}\`" \
+            "- Compatibility bundle: \`${ASSET_NAME}\`" \
+            "- Source branch: \`${RELEASE_BRANCH}\`" \
+            "- Source commit: \`${TARGET_COMMIT}\`" \
+            '' \
+            'The release commit advances the branch tracked by the AD5X Moonraker Update Manager, so installed printers can discover this plugin update normally in Fluidd.'
+          )"
+
+          gh release create "$NEW_TAG" \
+            --title "AD5X IFS Spoolman $NEW_TAG" \
+            --notes "$RELEASE_NOTES"
+
+          gh release view "$NEW_TAG" --json tagName,targetCommitish,url
