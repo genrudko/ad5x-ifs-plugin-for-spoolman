@@ -39,10 +39,183 @@ jobs:
           python3 -m json.tool examples/config.example.json >/dev/null
           python3 -m json.tool examples/assignments.example.json >/dev/null
           python3 -m json.tool native-fluidd/config.json >/dev/null
+          python3 -m json.tool native-fluidd/release-state.json >/dev/null
 
       - name: Validate standalone release invariants
         run: |
-          test "$(cat VERSION)" = "0.6.6-beta"
+          grep -Eq '^0\\.6\\.[0-9]+-beta          grep -F 'APP_VERSION = "0.5.1-beta"' plugin/ifs_spoolman.py
+          grep -F 'server_version="IFS-Spoolman/0.5.1-beta"' plugin/ifs_spoolman.py
+          grep -F 'slot_count = plain_int("slot_count", 4, 4)' plugin/ifs_spoolman.py
+          ! grep -F 'plain_int("slot_count", 1, 32)' plugin/ifs_spoolman.py
+          grep -F 'length > 65536' plugin/ifs_spoolman.py
+          grep -F 'spool_id <= 0' plugin/ifs_spoolman.py
+          ! grep -F 'self.address_string(),fmt%args' plugin/ifs_spoolman.py
+          grep -F 'AD5X_IFS_REF:-release/standalone-0.6.x' zmod-install.sh
+          grep -F 'AD5X_IFS_UPDATE_CHANNEL:-dev' zmod-install.sh
+          grep -F 'NATIVE_PATCH_REVISION="4"' zmod-install.sh
+          grep -F 'AD5X_IFS_FLUIDD_PATCH_REVISION:-4' scripts/install_fluidd_native.sh
+          grep -F 'AD5X IFS Spoolman' native-fluidd/apply_overlay.py
+          grep -F '"patch_revision": 10' native-fluidd/config.json
+          grep -F 'BACKUP_KEEP=5' update.sh
+          grep -F 'BACKUP_KEEP=5' scripts/update.sh
+          grep -F 'power_on_hook.sh' install.sh >/dev/null
+          grep -F 'power_on_hook.sh' update.sh >/dev/null
+          grep -F 'power_on_hook.sh' scripts/update.sh >/dev/null
+          grep -F 'power_on_hook.sh' PACKAGE_MANIFEST.txt >/dev/null
+          grep -F 'power_on_hook.sh' zmod-install.sh >/dev/null
+          grep -F 'install_fluidd_native.sh' install.sh >/dev/null
+          grep -F 'install_fluidd_native.sh' update.sh >/dev/null
+          grep -F 'install_fluidd_native.sh' zmod-install.sh >/dev/null
+          grep -F 'install_fluidd_native.sh' scripts/start.sh >/dev/null
+          grep -F 'restore_fluidd_native.sh' scripts/uninstall.sh >/dev/null
+          grep -F '/usr/data/config /opt/config' scripts/power_on_hook.sh >/dev/null
+          grep -F 'fluidd_integration' scripts/boot_start.sh >/dev/null
+          grep -F 'fluidd_integration' scripts/start.sh >/dev/null
+          grep -F 'fluidd_integration' scripts/status.sh >/dev/null
+          grep -F 'ifs-spoolman-dashboard' scripts/uninstall_fluidd_card.sh >/dev/null
+          grep -F 'ifs-spoolman-selection' scripts/uninstall_fluidd_card.sh >/dev/null
+          grep -F 'AD5X IFS Plugin for Spoolman >>>' scripts/power_on_hook.sh >/dev/null
+          grep -F 'snapshot_path "$POWER_ON" "external-power_on.sh"' update.sh >/dev/null
+          grep -F '.absent-$SNAP_KEY' update.sh >/dev/null
+          grep -F 'ROLLBACK_ARMED=1' update.sh >/dev/null
+          ! grep -F '0.2.2 beta' plugin/ifs_spoolman.py
+          ! grep -F '0.2.2 beta' plugin/ui_v0_2.html
+
+      - name: Exercise power-on hook idempotence
+        run: |
+          sudo mkdir -p /usr/data/config/mod_data/ifs_spoolman
+          printf '%s\n' '#!/bin/sh' 'echo user-startup-kept >/tmp/ad5x-user-startup' | sudo tee /usr/data/config/mod_data/power_on.sh >/dev/null
+          sudo chmod +x /usr/data/config/mod_data/power_on.sh
+          sudo cp scripts/power_on_hook.sh /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh
+          sudo chmod +x /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh
+
+          sudo /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh install
+          sudo /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh install
+
+          test "$(grep -Fc '# >>> AD5X IFS Plugin for Spoolman >>>' /usr/data/config/mod_data/power_on.sh)" -eq 1
+          grep -F 'echo user-startup-kept' /usr/data/config/mod_data/power_on.sh >/dev/null
+          sh -n /usr/data/config/mod_data/power_on.sh
+
+          sudo /usr/data/config/mod_data/ifs_spoolman/power_on_hook.sh remove
+          ! grep -F 'AD5X IFS Plugin for Spoolman >>>' /usr/data/config/mod_data/power_on.sh
+          grep -F 'echo user-startup-kept' /usr/data/config/mod_data/power_on.sh >/dev/null
+          sh -n /usr/data/config/mod_data/power_on.sh
+
+      - name: Exercise exact updater rollback
+        run: |
+          TARGET=/usr/data/config/mod_data/ifs_spoolman
+          SOURCE=/tmp/ad5x-update-source
+          EXPECTED_POWER_ON=/tmp/ad5x-power-on.expected
+
+          sudo rm -rf "$TARGET" "$SOURCE"
+          sudo mkdir -p "$TARGET"
+
+          printf '%s\n' '#!/bin/sh' 'exit 0' | sudo tee "$TARGET/stop.sh" >/dev/null
+          printf '%s\n' '#!/bin/sh' 'echo old-started >/tmp/ad5x-old-started' 'exit 0' | sudo tee "$TARGET/start.sh" >/dev/null
+          printf '%s\n' '0.6.3-beta' | sudo tee "$TARGET/VERSION" >/dev/null
+          printf '%s\n' '{"keep":"config"}' | sudo tee "$TARGET/config.json" >/dev/null
+          printf '%s\n' '{"1":9}' | sudo tee "$TARGET/assignments.json" >/dev/null
+          sudo chmod 0755 "$TARGET/stop.sh" "$TARGET/start.sh"
+
+          printf '%s\n' '#!/bin/sh' 'echo user-startup-kept' >"$EXPECTED_POWER_ON"
+          sudo cp "$EXPECTED_POWER_ON" /usr/data/config/mod_data/power_on.sh
+          sudo chmod 0700 /usr/data/config/mod_data/power_on.sh
+
+          cp -a . "$SOURCE"
+          printf '%s\n' '#!/bin/sh' 'exit 1' >"$SOURCE/scripts/start.sh"
+          chmod +x "$SOURCE/scripts/start.sh"
+
+          set +e
+          sudo sh "$SOURCE/update.sh"
+          RC=$?
+          set -e
+          test "$RC" -ne 0
+
+          grep -Fx '0.6.3-beta' "$TARGET/VERSION" >/dev/null
+          grep -F 'echo old-started' "$TARGET/start.sh" >/dev/null
+          grep -Fx '{"keep":"config"}' "$TARGET/config.json" >/dev/null
+          grep -Fx '{"1":9}' "$TARGET/assignments.json" >/dev/null
+          test -f /tmp/ad5x-old-started
+
+          test ! -e "$TARGET/power_on_hook.sh"
+          test ! -e "$TARGET/install_fluidd_native.sh"
+          test ! -e "$TARGET/restore_fluidd_native.sh"
+          test ! -e "$TARGET/ifs_spoolman.py"
+          test ! -e "$TARGET/ui_v0_2.html"
+
+          sudo cmp "$EXPECTED_POWER_ON" /usr/data/config/mod_data/power_on.sh
+          test "$(stat -c '%a' /usr/data/config/mod_data/power_on.sh)" = "700"
+          ! grep -F 'AD5X IFS Plugin for Spoolman >>>' /usr/data/config/mod_data/power_on.sh
+
+          BACKUP_DIR="$(sudo find "$TARGET/backups" -maxdepth 1 -type d -name 'update_*' | head -n 1)"
+          test -n "$BACKUP_DIR"
+          sudo test -f "$BACKUP_DIR/external-power_on.sh"
+          sudo test -f "$BACKUP_DIR/.absent-power_on_hook.sh"
+          sudo test -f "$BACKUP_DIR/.absent-install_fluidd_native.sh"
+          sudo test -f "$BACKUP_DIR/.absent-restore_fluidd_native.sh"
+
+      - name: Check package file parity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = {
+              line.strip()
+              for line in Path("PACKAGE_MANIFEST.txt").read_text().splitlines()
+              if line.strip() and not line.startswith("#")
+          }
+
+          expected_runtime = {
+              "ifs_spoolman.py",
+              "ui_v0_2.html",
+              "ifs-spoolman-card.js",
+              "ifs-spoolman-layout.js",
+              "ifs-spoolman-dashboard.js",
+              "ifs-spoolman-visibility.js",
+              "ifs-spoolman-selection.js",
+              "install_fluidd_card.sh",
+              "uninstall_fluidd_card.sh",
+              "install_fluidd_native.sh",
+              "restore_fluidd_native.sh",
+              "power_on_hook.sh",
+              "boot_start.sh",
+              "start.sh",
+              "stop.sh",
+              "status.sh",
+              "install.sh",
+              "update.sh",
+              "uninstall.sh",
+              "VERSION",
+              "PACKAGE_MANIFEST.txt",
+          }
+
+          if manifest != expected_runtime:
+              raise SystemExit(
+                  "PACKAGE_MANIFEST.txt mismatch:\n"
+                  f"missing={sorted(expected_runtime - manifest)}\n"
+                  f"extra={sorted(manifest - expected_runtime)}"
+              )
+
+          flattened = Path("scripts/install.sh").read_text(encoding="utf-8")
+          for name in (
+              "ifs-spoolman-dashboard.js",
+              "ifs-spoolman-visibility.js",
+              "ifs-spoolman-selection.js",
+              "install_fluidd_native.sh",
+              "restore_fluidd_native.sh",
+              "power_on_hook.sh",
+          ):
+              if name not in flattened:
+                  raise SystemExit(f"scripts/install.sh misses {name}")
+          PY
+
+      - name: Reject private runtime artifacts
+        run: |
+          test ! -e config.json
+          test ! -e assignments.json
+          ! find . -type f \( -name '*.log' -o -name '*.pid' -o -name '*.pyc' -o -name '*.bak_*' \) | grep .
+ VERSION
+          test "$(jq -r '.plugin_version' native-fluidd/release-state.json)" = "$(cat VERSION)"
           grep -F 'APP_VERSION = "0.5.1-beta"' plugin/ifs_spoolman.py
           grep -F 'server_version="IFS-Spoolman/0.5.1-beta"' plugin/ifs_spoolman.py
           grep -F 'slot_count = plain_int("slot_count", 4, 4)' plugin/ifs_spoolman.py
