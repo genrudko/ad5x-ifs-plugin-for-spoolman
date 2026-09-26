@@ -70,7 +70,7 @@ if fluidd_enabled; then
         echo "$APP_NAME: native Fluidd state patch ${INSTALLED_NATIVE_PATCH:-missing} -> $NATIVE_PATCH_REVISION, upstream ${INSTALLED_NATIVE_UPSTREAM:-missing} -> ${CURRENT_FLUIDD_UPSTREAM:-missing}; updating." >>"$NATIVE_LOG" 2>&1 || true
         AD5X_IFS_FLUIDD_PATCH_REVISION="$NATIVE_PATCH_REVISION" \
             "$APP_DIR/install_fluidd_native.sh" >>"$NATIVE_LOG" 2>&1 || {
-                echo "$APP_NAME: native Fluidd repair unavailable; legacy integration will be used." \
+                echo "$APP_NAME: native Fluidd repair unavailable; legacy automatic fallback is disabled." \
                     >>"$NATIVE_LOG" 2>&1 || true
             }
     fi
