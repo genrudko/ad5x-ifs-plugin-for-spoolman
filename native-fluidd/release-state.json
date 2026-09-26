@@ -1,5 +1,5 @@
 {
-  "plugin_version": "0.6.6-beta",
-  "fluidd_upstream_tag": "v1.37.4",
-  "patch_revision": 4
+  "plugin_version": "0.6.7-beta",
+  "fluidd_upstream_tag": "v1.37.6",
+  "patch_revision": 10
 }
