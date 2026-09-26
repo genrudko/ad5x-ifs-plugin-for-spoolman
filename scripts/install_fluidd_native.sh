@@ -5,6 +5,7 @@ APP_NAME="AD5X IFS Plugin for Spoolman"
 PATCH_REVISION="${AD5X_IFS_FLUIDD_PATCH_REVISION:-4}"
 SOURCE_CONFIG="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman/native-fluidd/config.json"
 SOURCE_REPO="/usr/data/config/mod_data/plugins/ad5x_ifs_spoolman"
+CHROOT_SOURCE_REPO="/opt/config/mod_data/plugins/ad5x_ifs_spoolman"
 if [ -z "${AD5X_IFS_FLUIDD_PATCH_REVISION+x}" ] && [ -f "$SOURCE_CONFIG" ]; then
     SOURCE_PATCH="$(sed -n 's/.*"patch_revision"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$SOURCE_CONFIG" | head -n 1)"
     case "$SOURCE_PATCH" in
@@ -183,9 +184,9 @@ download_from_git() {
 
     if chroot "$ROOT" /bin/sh -c 'command -v git >/dev/null 2>&1'; then
         echo "Transport: git / Moonraker chroot"
-        chroot "$ROOT" git -C "$SOURCE_REPO" fetch -q --depth=1 origin "$RAW_BRANCH" || return 1
-        chroot "$ROOT" git -C "$SOURCE_REPO" show "FETCH_HEAD:${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}/fluidd.zip" >"$ZIP_FILE" || return 1
-        chroot "$ROOT" git -C "$SOURCE_REPO" show "FETCH_HEAD:${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}/fluidd.zip.sha256" >"$SHA_FILE" || return 1
+        chroot "$ROOT" git -C "$CHROOT_SOURCE_REPO" fetch -q --depth=1 origin "$RAW_BRANCH" || return 1
+        chroot "$ROOT" git -C "$CHROOT_SOURCE_REPO" show "FETCH_HEAD:${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}/fluidd.zip" >"$ZIP_FILE" || return 1
+        chroot "$ROOT" git -C "$CHROOT_SOURCE_REPO" show "FETCH_HEAD:${UPSTREAM_TAG}/ifs-ui-v${PATCH_REVISION}/fluidd.zip.sha256" >"$SHA_FILE" || return 1
         return 0
     fi
 

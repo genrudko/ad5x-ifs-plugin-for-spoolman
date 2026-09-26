@@ -142,7 +142,7 @@ if fluidd_enabled && [ -x "$TARGET_DIR/install_fluidd_native.sh" ]; then
     echo "Fluidd UI: проверка нативной интеграции..."
     AD5X_IFS_FLUIDD_PATCH_REVISION="$NATIVE_PATCH_REVISION" \
         "$TARGET_DIR/install_fluidd_native.sh" ||
-        echo "ПРЕДУПРЕЖДЕНИЕ: native Fluidd пока недоступен; start.sh сохранит legacy fallback." >&2
+        echo "ПРЕДУПРЕЖДЕНИЕ: native Fluidd пока недоступен; legacy fallback отключён." >&2
 fi
 
 echo

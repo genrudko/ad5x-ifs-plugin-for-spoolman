@@ -42,13 +42,22 @@ fluidd_enabled() {
 }
 
 if fluidd_enabled; then
+    # Native Fluidd is the only supported automatic UI integration. Always
+    # remove historical DOM/script injection before continuing, even when a
+    # native marker is missing because a native repair failed.
+    if [ -x "$APP_DIR/uninstall_fluidd_card.sh" ]; then
+        "$APP_DIR/uninstall_fluidd_card.sh" \
+            >>"$APP_DIR/fluidd_card.log" 2>&1 || {
+                echo "$APP_NAME: WARNING: legacy Fluidd injection cleanup failed." \
+                    >>"$APP_DIR/fluidd_card.log" 2>&1 || true
+            }
+    fi
+
     if [ -f "$FLUIDD_NATIVE_MARKER" ]; then
-        # A compatibility build contains the IFS card as a real Fluidd Vue
-        # component. Never add the legacy HTML/DOM scripts on top of it.
-        echo "$APP_NAME: native Fluidd integration detected; legacy injection skipped." \
+        echo "$APP_NAME: native Fluidd integration detected; legacy injection is disabled." \
             >>"$APP_DIR/fluidd_card.log" 2>&1 || true
-    elif [ -x "$APP_DIR/install_fluidd_card.sh" ]; then
-        "$APP_DIR/install_fluidd_card.sh" \
+    else
+        echo "$APP_NAME: native Fluidd integration unavailable; legacy automatic fallback is disabled." \
             >>"$APP_DIR/fluidd_card.log" 2>&1 || true
     fi
 else
