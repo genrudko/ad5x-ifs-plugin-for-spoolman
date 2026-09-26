@@ -35,6 +35,23 @@ fluidd_enabled() {
     return 0
 }
 
+fluidd_version_from_dir() {
+    VERSION_DIR="$1"
+
+    if [ -f "$VERSION_DIR/.version" ]; then
+        cat "$VERSION_DIR/.version" 2>/dev/null || true
+        return 0
+    fi
+
+    RELEASE_INFO="$VERSION_DIR/release_info.json"
+    [ -f "$RELEASE_INFO" ] || return 1
+
+    grep -Eq '"project_name"[[:space:]]*:[[:space:]]*"fluidd"' "$RELEASE_INFO" || return 1
+    grep -Eq '"project_owner"[[:space:]]*:[[:space:]]*"ghzserg"' "$RELEASE_INFO" || return 1
+
+    sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\(v[0-9][^"]*\)".*/\1/p' "$RELEASE_INFO" | head -n 1
+}
+
 MOON_PID=""
 i=0
 
@@ -55,8 +72,9 @@ if [ -z "$MOON_PID" ]; then
 fi
 
 ROOT="/proc/$MOON_PID/root"
-NATIVE_MARKER="$ROOT/root/fluidd/ad5x_ifs_native.json"
-CURRENT_FLUIDD_UPSTREAM="$(cat "$ROOT/root/fluidd/.version" 2>/dev/null || true)"
+FLUIDD_DIR="$ROOT/root/fluidd"
+NATIVE_MARKER="$FLUIDD_DIR/ad5x_ifs_native.json"
+CURRENT_FLUIDD_UPSTREAM="$(fluidd_version_from_dir "$FLUIDD_DIR" 2>/dev/null || true)"
 
 if fluidd_enabled; then
     INSTALLED_NATIVE_PATCH=""
