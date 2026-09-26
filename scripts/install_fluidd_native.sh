@@ -38,6 +38,23 @@ fail() {
     exit 1
 }
 
+fluidd_version_from_dir() {
+    VERSION_DIR="$1"
+
+    if [ -f "$VERSION_DIR/.version" ]; then
+        cat "$VERSION_DIR/.version" 2>/dev/null || true
+        return 0
+    fi
+
+    RELEASE_INFO="$VERSION_DIR/release_info.json"
+    [ -f "$RELEASE_INFO" ] || return 1
+
+    grep -Eq '"project_name"[[:space:]]*:[[:space:]]*"fluidd"' "$RELEASE_INFO" || return 1
+    grep -Eq '"project_owner"[[:space:]]*:[[:space:]]*"ghzserg"' "$RELEASE_INFO" || return 1
+
+    sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\(v[0-9][^"]*\)".*/\1/p' "$RELEASE_INFO" | head -n 1
+}
+
 legacy_present() {
     LEGACY_DIR="$1"
     [ -d "$LEGACY_DIR" ] || return 1
@@ -135,9 +152,9 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 [ -d "$FLUIDD_DIR" ] || fail "Fluidd directory not found inside Moonraker root"
-[ -f "$FLUIDD_DIR/.version" ] || fail "Fluidd .version is missing"
 
-UPSTREAM_TAG="$(cat "$FLUIDD_DIR/.version" 2>/dev/null || true)"
+UPSTREAM_TAG="$(fluidd_version_from_dir "$FLUIDD_DIR" 2>/dev/null || true)"
+[ -n "$UPSTREAM_TAG" ] || fail "Fluidd version identity is missing (.version and valid release_info.json unavailable)"
 case "$UPSTREAM_TAG" in
     v[0-9]*.[0-9]*.[0-9]*) ;;
     *) fail "unsupported Fluidd version value: $UPSTREAM_TAG" ;;
