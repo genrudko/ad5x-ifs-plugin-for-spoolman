@@ -61,3 +61,9 @@ assert 'cannot resolve installed Fluidd version from release_info.json, .version
 assert 'STATUS_INNER="/root/.ad5x-ifs-native-fluidd.$$/moonraker-update-status.json"' in native_installer, (
     'Moonraker status JSON path must match the host work directory inside the chroot'
 )
+assert 'current_fluidd_version()' in start, (
+    'start.sh must resolve current Fluidd version without requiring .version'
+)
+assert 'release_info.json' in start, (
+    'start.sh must use Sergey Fluidd release_info.json when .version is absent'
+)
