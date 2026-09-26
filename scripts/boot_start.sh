@@ -42,22 +42,23 @@ fluidd_enabled() {
 }
 
 if fluidd_enabled; then
-    # Native Fluidd is the only supported automatic UI integration. Always
-    # remove historical DOM/script injection before continuing, even when a
-    # native marker is missing because a native repair failed.
-    if [ -x "$APP_DIR/uninstall_fluidd_card.sh" ]; then
-        "$APP_DIR/uninstall_fluidd_card.sh" \
-            >>"$APP_DIR/fluidd_card.log" 2>&1 || {
-                echo "$APP_NAME: WARNING: legacy Fluidd injection cleanup failed." \
-                    >>"$APP_DIR/fluidd_card.log" 2>&1 || true
-            }
-    fi
-
+    # Native Fluidd is the only supported automatic UI integration. Do not
+    # install the historical DOM/script fallback. However, if migration to the
+    # native bundle fails, leave any pre-existing legacy UI untouched until a
+    # native install succeeds; deleting the working UI before replacement made
+    # recovery unnecessarily destructive.
     if [ -f "$FLUIDD_NATIVE_MARKER" ]; then
+        if [ -x "$APP_DIR/uninstall_fluidd_card.sh" ]; then
+            "$APP_DIR/uninstall_fluidd_card.sh" \
+                >>"$APP_DIR/fluidd_card.log" 2>&1 || {
+                    echo "$APP_NAME: WARNING: stale legacy Fluidd cleanup failed." \
+                        >>"$APP_DIR/fluidd_card.log" 2>&1 || true
+                }
+        fi
         echo "$APP_NAME: native Fluidd integration detected; legacy injection is disabled." \
             >>"$APP_DIR/fluidd_card.log" 2>&1 || true
     else
-        echo "$APP_NAME: native Fluidd integration unavailable; legacy automatic fallback is disabled." \
+        echo "$APP_NAME: native Fluidd integration unavailable; legacy automatic fallback remains disabled and existing UI state is preserved." \
             >>"$APP_DIR/fluidd_card.log" 2>&1 || true
     fi
 else
