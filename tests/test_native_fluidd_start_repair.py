@@ -1,5 +1,7 @@
 from pathlib import Path
 import re
+import subprocess
+import tempfile
 
 start = Path('scripts/start.sh').read_text()
 
@@ -57,3 +59,59 @@ assert 'release_info.json' in native_installer, (
 assert 'Fluidd .version is missing' not in native_installer, (
     'missing .version alone must not abort native installation'
 )
+
+def extract_function(script: str, name: str) -> str:
+    match = re.search(
+        rf'^{re.escape(name)}\(\) \{{\n.*?^\}}\n',
+        script,
+        re.M | re.S,
+    )
+    assert match, f'{name} function not found'
+    return match.group(0)
+
+
+def run_version_helper(script: str, fixture: Path):
+    function = extract_function(script, 'fluidd_version_from_dir')
+    return subprocess.run(
+        ['sh', '-c', function + '\nfluidd_version_from_dir "$1"', 'sh', str(fixture)],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+
+for script_name, script_text in (
+    ('start.sh', start),
+    ('install_fluidd_native.sh', native_installer),
+):
+    with tempfile.TemporaryDirectory() as tmp:
+        fixture = Path(tmp)
+
+        (fixture / 'release_info.json').write_text(
+            '{"project_name":"fluidd","project_owner":"ghzserg","version":"v1.37.6"}\n'
+        )
+        result = run_version_helper(script_text, fixture)
+        assert result.returncode == 0, (
+            f'{script_name} must resolve Fluidd from release_info.json without .version: '
+            f'{result.stderr}'
+        )
+        assert result.stdout.strip() == 'v1.37.6', (
+            f'{script_name} resolved unexpected release_info version: {result.stdout!r}'
+        )
+
+        (fixture / '.version').write_text('v1.37.5\n')
+        result = run_version_helper(script_text, fixture)
+        assert result.returncode == 0
+        assert result.stdout.strip() == 'v1.37.5', (
+            f'{script_name} must prefer .version when both identity sources exist'
+        )
+
+        (fixture / '.version').unlink()
+        (fixture / 'release_info.json').write_text(
+            '{"project_name":"fluidd","project_owner":"someone-else","version":"v1.37.6"}\n'
+        )
+        result = run_version_helper(script_text, fixture)
+        assert result.returncode != 0 or not result.stdout.strip(), (
+            f'{script_name} must reject release metadata from the wrong project owner'
+        )
+
