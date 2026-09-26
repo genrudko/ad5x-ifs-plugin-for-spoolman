@@ -38,7 +38,7 @@ jobs:
         with:
           # Scheduled workflows are loaded from the default branch, but the
           # supported native compatibility source is the standalone release line.
-          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish == true) || (github.event_name == 'push' && github.ref_name == 'main')) && 'release/standalone-0.6.x' || github.ref }}
+          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)) && 'release/standalone-0.6.x' || github.ref }}
           fetch-depth: 0
 
       - name: Resolve upstream release and compatibility channels
@@ -297,7 +297,7 @@ jobs:
 
       - name: Resolve plugin release state
         id: plugin_release
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish == true) || (github.event_name == 'push' && github.ref_name == 'main')
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
         env:
           GH_TOKEN: ${{ github.token }}
           UPSTREAM_TAG: ${{ steps.meta.outputs.upstream_tag }}
