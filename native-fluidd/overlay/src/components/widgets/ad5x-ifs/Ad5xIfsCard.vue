@@ -280,7 +280,7 @@ export default Vue.extend({
   mounted () {
     void this.refreshData()
     this.refreshTimer = window.setInterval(() => {
-      void this.refreshData()
+      this.refreshData()
     }, API_REFRESH_MS)
   },
 
@@ -330,7 +330,7 @@ export default Vue.extend({
     normalizeHex (value: unknown): string | null {
       if (value == null) return null
       const normalized = String(value).trim().replace(/^#/, '')
-      return /^[0-9a-fA-F]{6}$/.test(normalized)
+      return /^[0-9a-f]{6}$/i.test(normalized)
         ? `#${normalized.toUpperCase()}`
         : null
     },
