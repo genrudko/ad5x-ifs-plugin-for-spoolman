@@ -161,10 +161,23 @@ jobs:
         working-directory: upstream-fluidd
         run: pnpm install --frozen-lockfile
 
-      - name: Type-check native Fluidd build
+      - name: Run upstream-equivalent quality gates
         if: steps.meta.outputs.all_published != 'true'
         working-directory: upstream-fluidd
-        run: pnpm run type-check
+        run: |
+          set -eu
+
+          pnpm run lint --no-fix
+
+          if grep -Fq 'pnpm run type-check' .github/workflows/_build.yml; then
+            echo 'Upstream build policy includes type-check; enforcing it.'
+            pnpm run type-check
+          else
+            echo 'Upstream build policy omits type-check; skipping the broken global TypeScript gate.'
+          fi
+
+          pnpm run test:unit
+          pnpm run circular-check
 
       - name: Build native Fluidd distribution
         if: steps.meta.outputs.all_published != 'true'
@@ -298,7 +311,7 @@ jobs:
 
       - name: Resolve plugin release state
         id: plugin_release
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish == true) || (github.event_name == 'push' && github.ref_name == 'release/standalone-0.6.x')
         env:
           GH_TOKEN: ${{ github.token }}
           UPSTREAM_TAG: ${{ steps.meta.outputs.upstream_tag }}

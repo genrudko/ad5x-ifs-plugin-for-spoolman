@@ -38,3 +38,17 @@ assert "github.event_name == 'workflow_dispatch' && inputs.publish == true" in w
 assert "release/standalone-0.6.x" in workflow, (
     "scheduled/manual publish runs must use the standalone release line as source"
 )
+
+assert "grep -Fq 'pnpm run type-check' .github/workflows/_build.yml" in workflow, (
+    "native Fluidd CI must follow the exact upstream release's type-check policy"
+)
+assert "Upstream build policy omits type-check" in workflow, (
+    "upstream releases that intentionally omit the broken global type-check must not be blocked"
+)
+assert "pnpm run lint --no-fix" in workflow
+assert "pnpm run test:unit" in workflow
+assert "pnpm run circular-check" in workflow
+assert "github.event_name == 'push' && github.ref_name == 'release/standalone-0.6.x'" in workflow, (
+    "a production release-line compatibility repair must be able to publish the resulting plugin release immediately"
+)
+

@@ -311,10 +311,10 @@ export default Vue.extend({
   },
 
   mounted () {
-    void this.refreshSpoolmanUrl()
-    void this.refreshData()
+    this.refreshSpoolmanUrl()
+    this.refreshData()
     this.refreshTimer = window.setInterval(() => {
-      void this.refreshData()
+      this.refreshData()
     }, API_REFRESH_MS)
   },
 
@@ -338,7 +338,7 @@ export default Vue.extend({
         this.spoolmanUrl = typeof config?.spoolman_url === 'string' && config.spoolman_url
           ? config.spoolman_url
           : null
-      } catch (_) {
+      } catch {
         this.spoolmanUrl = null
       }
     },
@@ -353,7 +353,6 @@ export default Vue.extend({
         this.status = status || null
         this.spools = Array.isArray(spools) ? spools : []
         this.lastError = null
-
       } catch (error) {
         this.lastError = error instanceof Error ? error.message : String(error)
       }
@@ -373,7 +372,7 @@ export default Vue.extend({
           url.hostname = window.location.hostname
         }
         target = url.toString()
-      } catch (_) {
+      } catch {
         return
       }
 
@@ -394,7 +393,7 @@ export default Vue.extend({
     normalizeHex (value: unknown): string | null {
       if (value == null) return null
       const normalized = String(value).trim().replace(/^#/, '')
-      return /^[0-9a-fA-F]{6}$/.test(normalized)
+      return /^[0-9a-f]{6}$/i.test(normalized)
         ? `#${normalized.toUpperCase()}`
         : null
     },
