@@ -6,7 +6,6 @@ on:
       - main
       - feature/native-fluidd-ui-v1
       - release/standalone-0.6.x
-      - fix/fluidd-1.37.7-upstream-typecheck-policy
     paths:
       - 'native-fluidd/**'
       - '.github/workflows/native-fluidd.yml'
