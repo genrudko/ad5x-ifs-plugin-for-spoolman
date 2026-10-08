@@ -42,6 +42,10 @@ See the [mandatory Spoolman setup guide](docs/spoolman.md).
 - Root SSH access for the first installation.
 - Printer access to GitHub/raw.githubusercontent.com.
 
+### Stock AD5X screen
+
+**The stock AD5X touchscreen is not supported.** The plugin does not add Spoolman or IFS controls to the printer's built-in screen. Use Fluidd or the plugin's standalone web interface at `http://PRINTER_IP:7913/`.
+
 ## One SSH command for the first installation
 
 Connect over SSH as `root` and run:
