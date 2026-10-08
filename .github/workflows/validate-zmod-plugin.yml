@@ -116,6 +116,7 @@ jobs:
 
           sudo rm -rf "$TARGET" "$SOURCE" "$FAKEBIN"
           sudo rm -f "$STOP_MARKER"
+          sudo rm -f /usr/data/config/mod_data/user.moonraker.conf
           sudo mkdir -p "$TARGET"
           mkdir -p "$FAKEBIN"
 
