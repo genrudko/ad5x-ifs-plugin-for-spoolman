@@ -116,7 +116,8 @@ jobs:
 
           sudo rm -rf "$TARGET" "$SOURCE" "$FAKEBIN"
           sudo rm -f "$STOP_MARKER"
-          sudo mkdir -p "$TARGET" "$FAKEBIN"
+          sudo mkdir -p "$TARGET"
+          mkdir -p "$FAKEBIN"
 
           printf '%s\n' '#!/bin/sh' 'echo stopped >'"$STOP_MARKER" | sudo tee "$TARGET/stop.sh" >/dev/null
           printf '%s\n' '#!/bin/sh' 'exit 0' | sudo tee "$TARGET/start.sh" >/dev/null
