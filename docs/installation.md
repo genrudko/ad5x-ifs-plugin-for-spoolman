@@ -18,6 +18,8 @@ The response must contain:
 "spoolman_connected": true
 ```
 
+> **Stock AD5X screen:** the plugin does not add Spoolman or IFS controls to the printer's built-in touchscreen. Use Fluidd or the standalone plugin UI at `http://PRINTER_IP:7913/`.
+
 ## 2. First installation: one SSH command
 
 Connect to the printer as `root` and run:
