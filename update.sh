@@ -140,7 +140,7 @@ snapshot_path "$USER_MOONRAKER" "external-user.moonraker.conf"
 
 rollback() {
     echo "$APP_NAME: rollback."
-    "$TARGET_DIR/stop.sh" 2>/dev/null || true
+    sh "$TARGET_DIR/stop.sh" 2>/dev/null || true
 
     for FILE in $TRACKED_FILES; do
         restore_path "$TARGET_DIR/$FILE" "$FILE"
@@ -148,8 +148,8 @@ rollback() {
     restore_path "$POWER_ON" "external-power_on.sh"
     restore_path "$USER_MOONRAKER" "external-user.moonraker.conf"
 
-    if [ -x "$TARGET_DIR/start.sh" ]; then
-        "$TARGET_DIR/start.sh" 2>/dev/null || true
+    if [ -f "$TARGET_DIR/start.sh" ]; then
+        sh "$TARGET_DIR/start.sh" 2>/dev/null || true
     fi
     prune_backups
 }
@@ -180,7 +180,7 @@ if ! "$UPDATE_MANAGER_HOOK" present >/dev/null 2>&1; then
     "$UPDATE_MANAGER_HOOK" install
 fi
 
-"$TARGET_DIR/stop.sh" || true
+sh "$TARGET_DIR/stop.sh" || true
 for FILE in $PLUGIN_FILES; do cp "$REPO_DIR/plugin/$FILE" "$TARGET_DIR/$FILE"; done
 for FILE in $SCRIPT_FILES; do cp "$REPO_DIR/scripts/$FILE" "$TARGET_DIR/$FILE"; done
 cp "$REPO_DIR/install.sh" "$TARGET_DIR/install.sh"
@@ -189,16 +189,17 @@ cp "$REPO_DIR/PACKAGE_MANIFEST.txt" "$TARGET_DIR/PACKAGE_MANIFEST.txt"
 chmod +x "$TARGET_DIR"/*.sh
 "$TARGET_DIR/power_on_hook.sh" install
 
-if ! "$TARGET_DIR/start.sh"; then
+if ! sh "$TARGET_DIR/start.sh"; then
     echo "$APP_NAME: runtime start failed" >&2
     exit 1
 fi
 
 HEALTH_OK=0
 HEALTH_TMP="$BACKUP_DIR/health.json"
-HEALTH_PYTHON="/root/moonraker-env/bin/python3"
-[ -x "$HEALTH_PYTHON" ] || {
-    echo "$APP_NAME: Moonraker Python не найден: $HEALTH_PYTHON" >&2
+HEALTH_URL="http://127.0.0.1:7913/api/health"
+
+command -v wget >/dev/null 2>&1 || {
+    echo "$APP_NAME: wget не найден для локального health-check" >&2
     exit 1
 }
 
@@ -206,26 +207,8 @@ i=0
 while [ "$i" -lt 20 ]; do
     rm -f "$HEALTH_TMP"
 
-    if "$HEALTH_PYTHON" - "$HEALTH_TMP" <<'PY'
-import json
-import sys
-import urllib.request
-
-output = sys.argv[1]
-url = "http://127.0.0.1:7913/api/health"
-expected = "AD5X IFS Plugin for Spoolman"
-
-try:
-    with urllib.request.urlopen(url, timeout=2.0) as response:
-        raw = response.read()
-    with open(output, "wb") as stream:
-        stream.write(raw)
-    payload = json.loads(raw.decode("utf-8"))
-except Exception:
-    raise SystemExit(1)
-
-raise SystemExit(0 if payload.get("application") == expected else 1)
-PY
+    if wget -qO "$HEALTH_TMP" "$HEALTH_URL" 2>/dev/null &&
+        grep -Eq '"application"[[:space:]]*:[[:space:]]*"AD5X IFS Plugin for Spoolman"' "$HEALTH_TMP"
     then
         HEALTH_OK=1
         break

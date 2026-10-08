@@ -58,7 +58,7 @@ fi
 # currently working runtime can be rolled back on failure.
 if [ -d "$TARGET_DIR" ] && [ -f "$TARGET_DIR/ifs_spoolman.py" ]; then
     echo "$APP_NAME: existing runtime detected; using safe update path."
-    exec "$REPO_DIR/update.sh"
+    exec sh "$REPO_DIR/update.sh"
 fi
 
 mkdir -p "$TARGET_DIR"
