@@ -107,6 +107,56 @@ jobs:
           test ! -e "$TARGET/assignments.json"
           ! grep -F 'scripts/update.sh" --recover-only' install.sh
 
+      - name: Exercise existing-runtime update without exec bits or host Moonraker Python
+        run: |
+          TARGET=/usr/data/config/mod_data/ifs_spoolman
+          SOURCE=/tmp/ad5x-portable-update-source
+          FAKEBIN=/tmp/ad5x-portable-update-bin
+          STOP_MARKER=/tmp/ad5x-old-stop-ran
+
+          sudo rm -rf "$TARGET" "$SOURCE" "$FAKEBIN"
+          sudo rm -f "$STOP_MARKER"
+          sudo mkdir -p "$TARGET" "$FAKEBIN"
+
+          printf '%s\n' '#!/bin/sh' 'echo stopped >'"$STOP_MARKER" | sudo tee "$TARGET/stop.sh" >/dev/null
+          printf '%s\n' '#!/bin/sh' 'exit 0' | sudo tee "$TARGET/start.sh" >/dev/null
+          printf '%s\n' '0.6.12-beta' | sudo tee "$TARGET/VERSION" >/dev/null
+          printf '%s\n' '{"1":101,"2":null,"3":null,"4":null}' | sudo tee "$TARGET/assignments.json" >/dev/null
+
+          # Reproduce the field report: scripts exist but are not executable.
+          sudo chmod 0644 "$TARGET/stop.sh" "$TARGET/start.sh"
+
+          cp -a . "$SOURCE"
+          printf '%s\n' '#!/bin/sh' 'exit 0' >"$SOURCE/scripts/start.sh"
+          chmod 0644 "$SOURCE/scripts/start.sh"
+
+          cat >"$FAKEBIN/wget" <<'EOF'
+#!/bin/sh
+OUT=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -qO)
+            OUT="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+[ -n "$OUT" ] || exit 2
+printf '%s\n' '{"application":"AD5X IFS Plugin for Spoolman","status":"ok"}' >"$OUT"
+EOF
+          chmod +x "$FAKEBIN/wget"
+
+          sudo env PATH="$FAKEBIN:$PATH" sh "$SOURCE/update.sh"
+
+          sudo test -f "$STOP_MARKER"
+          sudo grep -Fx "$(cat VERSION)" "$TARGET/VERSION"
+          sudo test -x "$TARGET/stop.sh"
+          sudo test -x "$TARGET/start.sh"
+          ! grep -F '/root/moonraker-env/bin/python3' "$SOURCE/update.sh"
+
       - name: Keep disabled runtime disabled during source update
         run: |
           CONF=/usr/data/config/mod_data/user.moonraker.conf
