@@ -74,8 +74,9 @@ for FILE in config assignments; do
     fi
 done
 
-sh "$REPO_DIR/scripts/update.sh" --recover-only
-
+# A fresh public install has nothing to recover from historical local
+# migrations. Legacy assignment recovery belongs only to the existing-runtime
+# update path and must never be a prerequisite for installation.
 chmod +x "$TARGET_DIR"/*.sh
 "$TARGET_DIR/power_on_hook.sh" install
 
