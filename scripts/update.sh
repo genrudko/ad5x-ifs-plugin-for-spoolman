@@ -29,16 +29,48 @@ case "${1:-}" in
 esac
 
 recover_assignments() {
-    PYTHON="${AD5X_IFS_PYTHON:-/root/moonraker-env/bin/python3}"
-    if [ ! -x "$PYTHON" ]; then
-        PYTHON="$(command -v python3 2>/dev/null || true)"
-    fi
-    [ -n "$PYTHON" ] || {
-        echo "$APP_NAME: Python not found for assignment recovery" >&2
-        return 1
-    }
+    CURRENT_ASSIGNMENTS="$TARGET_DIR/assignments.json"
 
-    "$PYTHON" - "$TARGET_DIR" "$LEGACY_SOURCE" <<'PY'
+    # Recovery is only for historical migrations. If the current runtime
+    # already has a non-empty mapping, there is nothing to recover.
+    if [ -f "$CURRENT_ASSIGNMENTS" ] &&
+        grep -Eq '"[1-4]"[[:space:]]*:[[:space:]]*[1-9][0-9]*' "$CURRENT_ASSIGNMENTS"
+    then
+        echo "IFS assignments preserved: existing non-empty mapping"
+        return 0
+    fi
+
+    # Do not require Python on normal public installs/updates unless there is
+    # actually an old assignment file that might need recovery.
+    LEGACY_FOUND=0
+    for CANDIDATE in         "$LEGACY_SOURCE/assignments.json"         "$LEGACY_SOURCE".pre-git-*/assignments.json         "$TARGET_DIR".pre-git-*/assignments.json         "$TARGET_DIR"/backups/update_*/assignments.json         "$TARGET_DIR"/../plugins/*ifs*spoolman*.pre-git-*/assignments.json
+    do
+        if [ -f "$CANDIDATE" ]; then
+            LEGACY_FOUND=1
+            break
+        fi
+    done
+
+    if [ "$LEGACY_FOUND" -ne 1 ]; then
+        echo "IFS assignments recovery: no legacy mapping candidates"
+        return 0
+    fi
+
+    if [ "${AD5X_IFS_PYTHON+x}" = x ]; then
+        PYTHON="$AD5X_IFS_PYTHON"
+    else
+        PYTHON="/root/moonraker-env/bin/python3"
+        if [ ! -x "$PYTHON" ]; then
+            PYTHON="$(command -v python3 2>/dev/null || true)"
+        fi
+    fi
+
+    if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
+        echo "$APP_NAME: WARNING: optional legacy assignment recovery skipped; Python unavailable" >&2
+        return 0
+    fi
+
+    if ! "$PYTHON" - "$TARGET_DIR" "$LEGACY_SOURCE" <<'PY'
 import json
 import os
 import sys
@@ -118,6 +150,11 @@ if current is None and out.exists():
 else:
     print("IFS assignments recovery: no previous non-empty mapping found")
 PY
+    then
+        echo "$APP_NAME: WARNING: optional legacy assignment recovery failed; continuing without recovery" >&2
+    fi
+
+    return 0
 }
 
 if [ "$RECOVER_ONLY" -eq 1 ]; then
