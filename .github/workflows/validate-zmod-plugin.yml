@@ -89,6 +89,24 @@ jobs:
             exit 1
           fi
 
+      - name: Keep legacy assignment recovery optional without host Python
+        run: |
+          TARGET=/tmp/ad5x-public-install-target
+          LEGACY=/tmp/ad5x-public-install-legacy
+
+          rm -rf "$TARGET" "$LEGACY"
+          mkdir -p "$TARGET" "$LEGACY"
+          printf '%s\n' '{"1":101,"2":null,"3":null,"4":null}' >"$LEGACY/assignments.json"
+
+          env \
+            AD5X_IFS_TARGET_DIR="$TARGET" \
+            AD5X_IFS_LEGACY_SOURCE="$LEGACY" \
+            AD5X_IFS_PYTHON=/definitely/missing/python \
+            sh scripts/update.sh --recover-only
+
+          test ! -e "$TARGET/assignments.json"
+          ! grep -F 'scripts/update.sh" --recover-only' install.sh
+
       - name: Keep disabled runtime disabled during source update
         run: |
           CONF=/usr/data/config/mod_data/user.moonraker.conf
