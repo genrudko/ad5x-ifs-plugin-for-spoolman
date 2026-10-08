@@ -84,7 +84,12 @@ prune_backups() {
     done
 }
 
-sh "$REPO_DIR/scripts/update.sh" --recover-only
+# Assignment recovery exists only for migrations from historical
+# standalone layouts. It is best-effort and must never block a normal public
+# update on systems where host-side Python is unavailable.
+if ! sh "$REPO_DIR/scripts/update.sh" --recover-only; then
+    echo "$APP_NAME: WARNING: optional legacy assignment recovery failed; continuing update." >&2
+fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$TARGET_DIR/backups/update_$STAMP"
