@@ -40,4 +40,61 @@ assert 'if ! sh "$RESTORE_SCRIPT"; then' in uninstall
 assert 'rm -rf "$WORK_DIR" "$FAILED_DIR"' not in restore
 assert 'release asset has no SHA256 digest' in restore
 
+import os
+import subprocess
+import tempfile
+
+# Run the actual Z-Mod entrypoint in a temporary simulated installation:
+# the installed runtime has a deliberately stale uninstall.sh, while the Git
+# source has a new one.  Verify source wins even when runtime still exists.
+with tempfile.TemporaryDirectory(prefix="ad5x-uninstall-check-") as tmp:
+    simulation = Path(tmp)
+    runtime = simulation / "installed-runtime"
+    runtime.mkdir()
+    source_scripts = simulation / "scripts"
+    source_scripts.mkdir()
+    marker = simulation / "invoked"
+    old_runtime_helper = runtime / "uninstall.sh"
+    old_runtime_helper.write_text(
+        '#!/bin/sh\necho STALE > "$TEST_MARKER"\nexit 9\n', encoding="utf-8"
+    )
+
+    installed_entrypoint = simulation / "uninstall.sh"
+    installed_entrypoint.write_text(
+        entrypoint.replace(
+            'TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"',
+            f'TARGET_DIR="{runtime}"',
+        ).replace(
+            'CFG="/usr/data/config/mod_data/plugins.cfg"',
+            f'CFG="{simulation / "plugins.cfg"}"',
+        ),
+        encoding="utf-8",
+    )
+
+    source_helper = source_scripts / "uninstall.sh"
+    source_helper.write_text(
+        '#!/bin/sh\necho FRESH > "$TEST_MARKER"\nexit 0\n',
+        encoding="utf-8",
+    )
+    env = dict(os.environ, TEST_MARKER=str(marker))
+    ok = subprocess.run(["sh", str(installed_entrypoint)], env=env, capture_output=True)
+    assert ok.returncode == 0, ok.stderr
+    assert marker.read_text().strip() == "FRESH"
+
+    # On failure Z-Mod has already removed the include before calling this
+    # entrypoint. Make sure the source entrypoint restores it.
+    (simulation / "ad5x_ifs_spoolman.cfg").write_text(
+        "# fixture\n", encoding="utf-8"
+    )
+    (simulation / "plugins.cfg").write_text(
+        "# user config\n", encoding="utf-8"
+    )
+    source_helper.write_text(
+        '#!/bin/sh\nexit 7\n', encoding="utf-8"
+    )
+    bad = subprocess.run(["sh", str(installed_entrypoint)], env=env, capture_output=True)
+    assert bad.returncode != 0
+    include = "[include plugins/ad5x_ifs_spoolman/ad5x_ifs_spoolman.cfg]"
+    assert include in (simulation / "plugins.cfg").read_text()
+
 print("robust uninstall Fluidd restore invariants: OK")
