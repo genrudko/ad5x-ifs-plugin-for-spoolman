@@ -18,7 +18,7 @@ assert "curl " not in restore
 # snapshot must fall back to an exact-version release download.
 assert "clean_fluidd_dir \"$PREVIOUS_DIR\" \"$CURRENT_VERSION\"" in restore
 assert "fetching clean same-version Fluidd" in restore
-assert "downloaded Fluidd version does not match the installed version" in restore
+assert "downloaded Fluidd .version conflicts with installed version" in restore
 assert "downloaded Fluidd release identity is invalid" in restore
 
 # Never stop the daemon or remove autostart before Fluidd cleanup succeeds.
