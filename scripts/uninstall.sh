@@ -4,6 +4,8 @@ set -eu
 APP_NAME="AD5X IFS Plugin for Spoolman"
 APP_DIR="/usr/data/config/mod_data/ifs_spoolman"
 ZMOD_ROOT="/usr/data/.mod/.zmod"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+RESTORE_SCRIPT="$SCRIPT_DIR/restore_fluidd_native.sh"
 
 CONFIRMED=0
 PURGE=0
@@ -67,12 +69,12 @@ elif [ -d "$ZMOD_ROOT" ]; then
 fi
 
 if [ -n "$ROOT" ] && [ -f "$ROOT/root/fluidd/ad5x_ifs_native.json" ]; then
-    if [ ! -x "$APP_DIR/restore_fluidd_native.sh" ]; then
-        echo "$APP_NAME: native Fluidd найден, но restore_fluidd_native.sh отсутствует; удаление остановлено." >&2
+    if [ ! -f "$RESTORE_SCRIPT" ]; then
+        echo "$APP_NAME: native Fluidd найден, но source restore_fluidd_native.sh отсутствует: $RESTORE_SCRIPT" >&2
         exit 1
     fi
 
-    if ! "$APP_DIR/restore_fluidd_native.sh"; then
+    if ! sh "$RESTORE_SCRIPT"; then
         echo "$APP_NAME: не удалось восстановить чистый Fluidd; плагин оставлен включённым." >&2
         exit 1
     fi
