@@ -110,7 +110,7 @@ valid_fluidd_version "$CURRENT_VERSION" ||
     fail "cannot determine the current Fluidd version"
 
 cleanup() {
-    rm -rf "$WORK_DIR" "$FAILED_DIR" 2>/dev/null || true
+    rm -rf "$WORK_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -174,6 +174,8 @@ if not download_url:
     raise SystemExit("release asset has no download URL")
 
 digest = asset.get("digest") or ""
+if not digest:
+    raise SystemExit("release asset has no SHA256 digest; refusing unverified install")
 expected_sha = ""
 if digest:
     algorithm, separator, value = digest.partition(":")

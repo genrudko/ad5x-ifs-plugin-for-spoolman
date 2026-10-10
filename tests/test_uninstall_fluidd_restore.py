@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 restore = (ROOT / "scripts" / "restore_fluidd_native.sh").read_text(encoding="utf-8")
 uninstall = (ROOT / "scripts" / "uninstall.sh").read_text(encoding="utf-8")
+entrypoint = (ROOT / "uninstall.sh").read_text(encoding="utf-8")
 
 # Recovery must not depend on the AD5X host's incomplete curl/wget TLS stack.
 assert "/root/moonraker-env/bin/python3" in restore
@@ -21,7 +22,7 @@ assert "downloaded Fluidd version does not match the installed version" in resto
 assert "downloaded Fluidd release identity is invalid" in restore
 
 # Never stop the daemon or remove autostart before Fluidd cleanup succeeds.
-restore_pos = uninstall.index('"$APP_DIR/restore_fluidd_native.sh"')
+restore_pos = uninstall.index('if ! sh "$RESTORE_SCRIPT"; then')
 hook_pos = uninstall.index('"$APP_DIR/power_on_hook.sh" remove')
 stop_pos = uninstall.index('"$APP_DIR/stop.sh"')
 assert restore_pos < hook_pos < stop_pos
@@ -29,5 +30,71 @@ assert restore_pos < hook_pos < stop_pos
 # Preserve all user-owned assignment state when uninstall is non-purge.
 assert "assignments.json" in uninstall
 assert "lane_data_sync.json" in uninstall
+
+# Z-Mod runs root uninstall.sh from fresh Git source, bypassing stale runtime.
+assert 'SOURCE_UNINSTALL="$REPO_DIR/scripts/uninstall.sh"' in entrypoint
+assert 'sh "$SOURCE_UNINSTALL" --yes' in entrypoint
+assert '"$TARGET_DIR/uninstall.sh"' not in entrypoint
+assert 'RESTORE_SCRIPT="$SCRIPT_DIR/restore_fluidd_native.sh"' in uninstall
+assert 'if ! sh "$RESTORE_SCRIPT"; then' in uninstall
+assert 'rm -rf "$WORK_DIR" "$FAILED_DIR"' not in restore
+assert 'release asset has no SHA256 digest' in restore
+
+import os
+import subprocess
+import tempfile
+
+# Run the actual Z-Mod entrypoint in a temporary simulated installation:
+# the installed runtime has a deliberately stale uninstall.sh, while the Git
+# source has a new one.  Verify source wins even when runtime still exists.
+with tempfile.TemporaryDirectory(prefix="ad5x-uninstall-check-") as tmp:
+    simulation = Path(tmp)
+    runtime = simulation / "installed-runtime"
+    runtime.mkdir()
+    source_scripts = simulation / "scripts"
+    source_scripts.mkdir()
+    marker = simulation / "invoked"
+    old_runtime_helper = runtime / "uninstall.sh"
+    old_runtime_helper.write_text(
+        '#!/bin/sh\necho STALE > "$TEST_MARKER"\nexit 9\n', encoding="utf-8"
+    )
+
+    installed_entrypoint = simulation / "uninstall.sh"
+    installed_entrypoint.write_text(
+        entrypoint.replace(
+            'TARGET_DIR="/usr/data/config/mod_data/ifs_spoolman"',
+            f'TARGET_DIR="{runtime}"',
+        ).replace(
+            'CFG="/usr/data/config/mod_data/plugins.cfg"',
+            f'CFG="{simulation / "plugins.cfg"}"',
+        ),
+        encoding="utf-8",
+    )
+
+    source_helper = source_scripts / "uninstall.sh"
+    source_helper.write_text(
+        '#!/bin/sh\necho FRESH > "$TEST_MARKER"\nexit 0\n',
+        encoding="utf-8",
+    )
+    env = dict(os.environ, TEST_MARKER=str(marker))
+    ok = subprocess.run(["sh", str(installed_entrypoint)], env=env, capture_output=True)
+    assert ok.returncode == 0, ok.stderr
+    assert marker.read_text().strip() == "FRESH"
+
+    # On failure Z-Mod has already removed the include before calling this
+    # entrypoint. Make sure the source entrypoint restores it.
+    (simulation / "ad5x_ifs_spoolman.cfg").write_text(
+        "# fixture\n", encoding="utf-8"
+    )
+    (simulation / "plugins.cfg").write_text(
+        "# user config\n", encoding="utf-8"
+    )
+    source_helper.write_text(
+        '#!/bin/sh\nexit 7\n', encoding="utf-8"
+    )
+    bad = subprocess.run(["sh", str(installed_entrypoint)], env=env, capture_output=True)
+    assert bad.returncode != 0
+    include = "[include plugins/ad5x_ifs_spoolman/ad5x_ifs_spoolman.cfg]"
+    assert include in (simulation / "plugins.cfg").read_text()
 
 print("robust uninstall Fluidd restore invariants: OK")
