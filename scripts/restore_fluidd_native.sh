@@ -156,6 +156,7 @@ import pathlib
 import shutil
 import sys
 import urllib.request
+import urllib.error
 import zipfile
 
 version, repo, asset_name, stage_arg = sys.argv[1:5]
