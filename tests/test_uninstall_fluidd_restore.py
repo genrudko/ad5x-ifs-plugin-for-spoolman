@@ -18,7 +18,7 @@ assert "curl " not in restore
 # snapshot must fall back to an exact-version release download.
 assert "clean_fluidd_dir \"$PREVIOUS_DIR\" \"$CURRENT_VERSION\"" in restore
 assert "fetching clean same-version Fluidd" in restore
-assert "downloaded Fluidd version does not match the installed version" in restore
+assert "downloaded Fluidd .version conflicts with installed version" in restore
 assert "downloaded Fluidd release identity is invalid" in restore
 
 # Never stop the daemon or remove autostart before Fluidd cleanup succeeds.
@@ -38,7 +38,10 @@ assert '"$TARGET_DIR/uninstall.sh"' not in entrypoint
 assert 'RESTORE_SCRIPT="$SCRIPT_DIR/restore_fluidd_native.sh"' in uninstall
 assert 'if ! sh "$RESTORE_SCRIPT"; then' in uninstall
 assert 'rm -rf "$WORK_DIR" "$FAILED_DIR"' not in restore
-assert 'release asset has no SHA256 digest' in restore
+assert '"2b3e766481520d7d91d7a53d11ab17b0d0b8cec36d4b955074e0da5e250ddfbb"' in restore
+assert "Using pinned upstream SHA256" in restore
+assert "no GitHub API request" in restore
+assert "downloaded Fluidd .version conflicts" in restore
 
 import os
 import subprocess
@@ -96,5 +99,45 @@ with tempfile.TemporaryDirectory(prefix="ad5x-uninstall-check-") as tmp:
     assert bad.returncode != 0
     include = "[include plugins/ad5x_ifs_spoolman/ad5x_ifs_spoolman.cfg]"
     assert include in (simulation / "plugins.cfg").read_text()
+
+import tempfile
+import subprocess
+import os
+
+# Execute the production snapshot validator in a disposable shell environment.
+# A stock Moonraker web deployment may have release_info.json, not .version.
+func_source = restore.split('[ "$(id -u)" = "0" ]')[0]
+with tempfile.TemporaryDirectory(prefix="fluidd-snapshot-test-") as test_dir:
+    d = Path(test_dir) / "clean"
+    d.mkdir()
+    (d / "index.html").write_text("<html>Stock Fluidd</html>")
+    (d / "release_info.json").write_text(
+        '{"project_owner":"ghzserg","project_name":"fluidd","version":"v1.37.7"}'
+    )
+    validation = (
+        func_source
+        + "\nclean_fluidd_dir \"$1\" \"$2\"\n"
+    )
+    def check(expected_version):
+        return subprocess.run(
+            ["sh", "-c", validation, "snapshot-check", str(d), expected_version],
+            capture_output=True,
+            text=True
+        ).returncode
+
+    assert check("v1.37.7") == 0, "matching stock backup without .version rejected"
+    assert check("v1.37.6") != 0, "wrong-version snapshot accepted"
+    (d / ".version").write_text("v1.37.6")
+    assert check("v1.37.7") != 0, "conflicting explicit .version accepted"
+    (d / ".version").unlink()
+    (d / "ad5x_ifs_native.json").write_text('{"patch_revision":10}')
+    assert check("v1.37.7") != 0, "plugin-patched backup accepted"
+    (d / "ad5x_ifs_native.json").unlink()
+    (d / "release_info.json").write_text(
+        '{"project_owner":"wrong","project_name":"fluidd","version":"v1.37.7"}'
+    )
+    assert check("v1.37.7") != 0, "wrong owner accepted"
+    (d / "release_info.json").unlink()
+    assert check("v1.37.7") != 0, "missing release identity accepted"
 
 print("robust uninstall Fluidd restore invariants: OK")
