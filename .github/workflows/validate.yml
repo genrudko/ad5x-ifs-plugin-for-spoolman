@@ -18,6 +18,7 @@ jobs:
       - name: Check POSIX shell syntax
         run: |
           sh -n install.sh
+          sh -n uninstall.sh
           sh -n update.sh
           sh -n zmod-install.sh
           for file in scripts/*.sh; do sh -n "$file"; done
@@ -33,6 +34,9 @@ jobs:
 
       - name: Check native Fluidd upstream repair
         run: python3 tests/test_native_fluidd_start_repair.py
+
+      - name: Exercise source-first uninstall and Fluidd recovery invariants
+        run: python3 tests/test_uninstall_fluidd_restore.py
 
       - name: Validate example JSON
         run: |
