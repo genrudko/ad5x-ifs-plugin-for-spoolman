@@ -40,15 +40,9 @@ if [ "$CONFIRMED" -ne 1 ]; then
     exit 2
 fi
 
-if [ -x "$APP_DIR/power_on_hook.sh" ]; then
-    "$APP_DIR/power_on_hook.sh" remove || {
-        echo "$APP_NAME: не удалось безопасно удалить блок автозапуска." >&2
-        exit 1
-    }
-fi
-
-"$APP_DIR/stop.sh" || true
-
+# Preflight the UI cleanup before disabling the backend/autostart.  If native
+# Fluidd restoration cannot be completed, the plugin remains operational rather
+# than being left in a half-disabled state.
 MOON_PID=""
 ROOT=""
 
@@ -59,6 +53,7 @@ for P in /proc/[0-9]*; do
 
     case "$CMD" in
         *moonraker.py*)
+            [ -d "$P/root" ] || continue
             MOON_PID="${P##*/}"
             break
             ;;
@@ -78,7 +73,7 @@ if [ -n "$ROOT" ] && [ -f "$ROOT/root/fluidd/ad5x_ifs_native.json" ]; then
     fi
 
     if ! "$APP_DIR/restore_fluidd_native.sh"; then
-        echo "$APP_NAME: не удалось восстановить штатный Fluidd; удаление остановлено." >&2
+        echo "$APP_NAME: не удалось восстановить чистый Fluidd; плагин оставлен включённым." >&2
         exit 1
     fi
 
@@ -94,12 +89,23 @@ if [ -n "$ROOT" ]; then
         if ! chroot "$ROOT" \
             /opt/config/mod_data/ifs_spoolman/uninstall_fluidd_card.sh
         then
-            echo "$APP_NAME: WARNING: не удалось полностью очистить Fluidd-интеграцию." >&2
+            echo "$APP_NAME: не удалось полностью очистить legacy Fluidd-интеграцию; удаление остановлено." >&2
+            exit 1
         fi
     fi
 else
-    echo "$APP_NAME: WARNING: корень Z-Mod не найден; Fluidd-интеграция не проверена." >&2
+    echo "$APP_NAME: WARNING: корень Z-Mod/Moonraker не найден; Fluidd-интеграция не проверена." >&2
 fi
+
+# Only after the Fluidd cleanup has succeeded do we make runtime changes.
+if [ -x "$APP_DIR/power_on_hook.sh" ]; then
+    "$APP_DIR/power_on_hook.sh" remove || {
+        echo "$APP_NAME: не удалось безопасно удалить блок автозапуска." >&2
+        exit 1
+    }
+fi
+
+"$APP_DIR/stop.sh" || true
 
 if [ "$PURGE" -eq 0 ]; then
     STAMP="$(date +%Y%m%d_%H%M%S)"
@@ -110,6 +116,7 @@ if [ "$PURGE" -eq 0 ]; then
     for FILE in \
         config.json \
         assignments.json \
+        lane_data_sync.json \
         events.log \
         events.log.1 \
         events.log.2 \
