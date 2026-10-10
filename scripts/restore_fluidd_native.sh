@@ -63,10 +63,23 @@ clean_fluidd_dir() {
 
     [ -d "$CLEAN_DIR" ] || return 1
     [ -f "$CLEAN_DIR/index.html" ] || return 1
-    [ -f "$CLEAN_DIR/.version" ] || return 1
-    [ "$(cat "$CLEAN_DIR/.version" 2>/dev/null || true)" = "$EXPECTED_VERSION" ] || return 1
     [ ! -f "$CLEAN_DIR/ad5x_ifs_native.json" ] || return 1
     legacy_present "$CLEAN_DIR" && return 1
+
+    # Stock Moonraker "web" clients identify their release via release_info.json,
+    # and an older untouched ghzserg/fluidd snapshot may not have .version at
+    # all.  Requiring .version rejected this valid, matching-version snapshot.
+    INFO="$CLEAN_DIR/release_info.json"
+    [ -f "$INFO" ] || return 1
+    OWNER="$(sed -n 's/.*"project_owner"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INFO" | head -n 1)"
+    PROJECT="$(sed -n 's/.*"project_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INFO" | head -n 1)"
+    VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INFO" | head -n 1)"
+
+    [ "$OWNER/$PROJECT" = "$UPSTREAM_REPO" ] || return 1
+    [ "$VERSION" = "$EXPECTED_VERSION" ] || return 1
+    if [ -f "$CLEAN_DIR/.version" ]; then
+        [ "$(cat "$CLEAN_DIR/.version" 2>/dev/null || true)" = "$EXPECTED_VERSION" ] || return 1
+    fi
     return 0
 }
 
@@ -155,32 +168,49 @@ headers = {
     "Accept": "application/vnd.github+json",
     "User-Agent": "ad5x-ifs-spoolman-uninstaller",
 }
-api_url = f"https://api.github.com/repos/{repo}/releases/tags/{version}"
-with urllib.request.urlopen(
-    urllib.request.Request(api_url, headers=headers),
-    timeout=30,
-) as response:
-    release = json.load(response)
+# This digest is taken from the upstream GitHub release asset metadata.  It
+# permits a verified download without GitHub's 60/hour unauthenticated REST
+# API limit when the original untouched Fluidd snapshot is unavailable.
+pinned_assets = {
+    ("ghzserg/fluidd", "v1.37.7", "fluidd.zip"):
+        "2b3e766481520d7d91d7a53d11ab17b0d0b8cec36d4b955074e0da5e250ddfbb",
+}
+key = (repo, version, asset_name)
+expected_sha = pinned_assets.get(key)
+download_url = f"https://github.com/{repo}/releases/download/{version}/{asset_name}"
 
-asset = next(
-    (item for item in release.get("assets", []) if item.get("name") == asset_name),
-    None,
-)
-if asset is None:
-    raise SystemExit(f"release {version} has no {asset_name} asset")
+if expected_sha:
+    print(f"Using pinned upstream SHA256 for {repo} {version}; no GitHub API request")
+else:
+    # Newer/unpinned versions use the upstream release asset digest.
+    api_url = f"https://api.github.com/repos/{repo}/releases/tags/{version}"
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(api_url, headers=headers),
+            timeout=30,
+        ) as response:
+            release = json.load(response)
+    except urllib.error.HTTPError as exc:
+        if exc.code in (403, 429):
+            raise SystemExit(
+                f"GitHub release API rate-limited ({exc.code}); "
+                "no pinned checksum for this version; keeping current Fluidd"
+            ) from exc
+        raise
 
-download_url = asset.get("browser_download_url")
-if not download_url:
-    raise SystemExit("release asset has no download URL")
-
-digest = asset.get("digest") or ""
-if not digest:
-    raise SystemExit("release asset has no SHA256 digest; refusing unverified install")
-expected_sha = ""
-if digest:
+    asset = next(
+        (item for item in release.get("assets", []) if item.get("name") == asset_name),
+        None,
+    )
+    if asset is None:
+        raise SystemExit(f"release {version} has no {asset_name} asset")
+    download_url = asset.get("browser_download_url")
+    if not download_url:
+        raise SystemExit("release asset has no download URL")
+    digest = asset.get("digest") or ""
     algorithm, separator, value = digest.partition(":")
     if separator != ":" or algorithm.lower() != "sha256" or len(value) != 64:
-        raise SystemExit(f"unsupported release digest: {digest!r}")
+        raise SystemExit(f"missing or unsupported upstream SHA256 digest: {digest!r}")
     expected_sha = value.lower()
 
 request = urllib.request.Request(download_url, headers={"User-Agent": headers["User-Agent"]})
@@ -221,8 +251,8 @@ marker_file = stage / "ad5x_ifs_native.json"
 
 if not index_file.is_file():
     raise SystemExit("downloaded Fluidd has no index.html")
-if not version_file.is_file() or version_file.read_text().strip() != version:
-    raise SystemExit("downloaded Fluidd version does not match the installed version")
+if version_file.is_file() and version_file.read_text().strip() != version:
+    raise SystemExit("downloaded Fluidd .version conflicts with installed version")
 if marker_file.exists():
     raise SystemExit("downloaded Fluidd unexpectedly contains the AD5X IFS marker")
 if not release_info_file.is_file():
